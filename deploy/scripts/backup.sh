@@ -46,7 +46,7 @@ if running keycloak; then
 K=/opt/keycloak/bin/kcadm.sh; C=(--config /tmp/kcadm-backup.config)
 trap 'rm -f /tmp/kcadm-backup.config' EXIT
 "$K" config credentials "${C[@]}" --server http://localhost:8080/auth --realm master --user "$U" --password "$P" >/dev/null 2>&1
-"$K" create realms/inion/partial-export "${C[@]}" -s exportClients=true -s exportGroupsAndRoles=true -o
+"$K" create "realms/inion/partial-export?exportClients=true&exportGroupsAndRoles=true" "${C[@]}" -o
 EOF
 ) | docker exec -i keycloak bash -s > "${BACKUP_DIR}/keycloak_realm_inion.json" 2>/dev/null \
     || echo "[backup] WARNING: Keycloak realm export failed (DB dump is still there)" >&2
