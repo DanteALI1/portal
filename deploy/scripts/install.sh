@@ -37,13 +37,19 @@ if command -v getenforce >/dev/null && [[ "$(getenforce)" != "Disabled" ]]; then
 fi
 
 log "4/10 Docker Engine"
-if ! command -v docker >/dev/null; then
-  dnf remove -y docker docker-client docker-client-latest docker-common \
-    docker-latest docker-latest-logrotate docker-logrotate docker-engine \
-    podman podman-docker runc 2>/dev/null || true
-  dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo || true
-  dnf install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+# On Red OS `docker` may be the podman-docker shim — treat it as "no Docker".
+if ! command -v docker >/dev/null || rpm -q podman-docker >/dev/null 2>&1; then
+  dnf remove -y podman-docker 2>/dev/null || true
+  # Red OS ships docker-ce and docker-compose (cli plugin) in its own repos.
+  if ! dnf install -y docker-ce docker-ce-cli docker-compose; then
+    dnf remove -y docker docker-client docker-client-latest docker-common \
+      docker-latest docker-latest-logrotate docker-logrotate docker-engine \
+      podman podman-docker runc 2>/dev/null || true
+    dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo || true
+    dnf install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+  fi
 fi
+docker compose version
 
 mkdir -p /etc/docker
 cat > /etc/docker/daemon.json <<'EOF'
@@ -66,8 +72,8 @@ mkdir -p \
 chmod 700 "${SERVICES_ROOT}/backups"
 
 # Sync deploy assets
-rsync -a --delete "${REPO_ROOT}/deploy/netbox/" "${SERVICES_ROOT}/netbox/"
-rsync -a --delete "${REPO_ROOT}/deploy/mediawiki/" "${SERVICES_ROOT}/mediawiki/"
+rsync -a --delete --exclude .env "${REPO_ROOT}/deploy/netbox/" "${SERVICES_ROOT}/netbox/"
+rsync -a --delete --exclude .env --exclude LocalSettings.php --exclude LocalSettings.generated.php "${REPO_ROOT}/deploy/mediawiki/" "${SERVICES_ROOT}/mediawiki/"
 rsync -a "${REPO_ROOT}/deploy/scripts/" "${SERVICES_ROOT}/scripts/"
 # Portal application sources
 rsync -a --delete \
@@ -117,7 +123,7 @@ systemctl enable netbox.service mediawiki.service portal.service
 
 # Cron backup at 03:00
 CRON_LINE="0 3 * * * ${SERVICES_ROOT}/scripts/backup.sh >> /var/log/services/backup.log 2>&1"
-(crontab -l 2>/dev/null | grep -v backup.sh; echo "${CRON_LINE}") | crontab -
+{ crontab -l 2>/dev/null | grep -v backup.sh || true; echo "${CRON_LINE}"; } | crontab -
 
 systemctl reload nginx || systemctl restart nginx
 

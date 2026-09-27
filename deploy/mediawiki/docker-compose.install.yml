@@ -1,5 +1,6 @@
-# Temporary override for first-time install (no LocalSettings.php yet)
+# Temporary override for first-time install (no LocalSettings.php yet).
+# !override replaces the volume list instead of merging it (Compose >= 2.24).
 services:
   mediawiki:
-    volumes:
+    volumes: !override
       - wiki-images:/var/www/html/images

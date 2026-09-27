@@ -12,7 +12,7 @@ from typing import Literal
 import httpx
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
@@ -128,15 +128,29 @@ async def create_system(payload: SystemIn) -> dict:
     return item
 
 
-@app.delete("/api/systems/{system_id}", status_code=204)
-async def delete_system(system_id: str) -> None:
+@app.delete("/api/systems/{system_id}", status_code=204, response_class=Response)
+async def delete_system(system_id: str) -> Response:
     items = _load()
     target = next((x for x in items if x["id"] == system_id), None)
     if target is None:
         raise HTTPException(status_code=404, detail="System not found")
-    if target.get("builtin"):
-        raise HTTPException(status_code=400, detail="Built-in systems cannot be deleted")
+    # Built-in cards may be removed too; restore them via /api/systems/restore-defaults
     _save([x for x in items if x["id"] != system_id])
+    return Response(status_code=204)
+
+
+@app.post("/api/systems/restore-defaults", response_model=list[System])
+async def restore_defaults() -> list[dict]:
+    """Re-add built-in systems that were deleted; custom ones are kept."""
+    items = _load()
+    by_id = {x["id"]: x for x in items}
+    default_ids = {x["id"] for x in DEFAULT_SYSTEMS}
+    # Built-ins first in their default order, then custom systems as they were
+    restored = [by_id.get(x["id"], dict(x)) for x in DEFAULT_SYSTEMS]
+    restored += [x for x in items if x["id"] not in default_ids]
+    if restored != items:
+        _save(restored)
+    return restored
 
 
 @app.get("/api/systems/{system_id}/status")
