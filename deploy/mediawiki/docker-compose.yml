@@ -4,7 +4,8 @@
 
 services:
   mediawiki:
-    image: docker.io/mediawiki:1.41
+    build: .
+    image: rep-mediawiki:1.41.5-sso
     container_name: mediawiki
     depends_on:
       mariadb:
@@ -20,7 +21,7 @@ services:
       - services-network
 
   mariadb:
-    image: docker.io/mariadb:10.11
+    image: docker.io/mariadb:10.11.19
     container_name: wiki-mariadb
     env_file: .env
     environment:

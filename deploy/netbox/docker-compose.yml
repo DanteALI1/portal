@@ -53,7 +53,7 @@ services:
     ports: []
 
   postgres:
-    image: docker.io/postgres:16-alpine
+    image: docker.io/postgres:16.15-alpine
     container_name: netbox-postgres
     env_file: .env
     environment:
@@ -73,7 +73,7 @@ services:
       - services-network
 
   redis:
-    image: docker.io/redis:7-alpine
+    image: docker.io/redis:7.4.9-alpine
     container_name: netbox-redis
     command: ["sh", "-c", "redis-server --appendonly yes --requirepass \"$$REDIS_PASSWORD\""]
     env_file: .env
@@ -89,7 +89,7 @@ services:
       - services-network
 
   redis-cache:
-    image: docker.io/redis:7-alpine
+    image: docker.io/redis:7.4.9-alpine
     container_name: netbox-redis-cache
     command: ["sh", "-c", "redis-server --requirepass \"$$REDIS_CACHE_PASSWORD\""]
     env_file: .env

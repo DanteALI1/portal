@@ -1,27 +1,31 @@
 # Развёртывание REP Portal на RED OS 8
 
-Инструкция проверена на реальной установке: RED OS 8.0.3, SELinux Enforcing,
-Docker CE 29 из репозитория RED OS. Результат — на одном сервере:
+Инструкция проверена на реальной установке «с нуля»: RED OS 8.0.3, SELinux Enforcing,
+Docker CE 29 из репозитория RED OS. Результат — на одном сервере с единым входом (SSO):
 
 | Адрес | Сервис |
 |---|---|
-| `https://rep.local.inion/` | Портал (каталог систем, можно добавлять и удалять) |
+| `https://rep.local.inion/` | Портал: каталог систем, мониторинг, журнал действий |
 | `https://rep.local.inion/netbox/` | NetBox (DCIM/IPAM) |
 | `https://rep.local.inion/wiki/` | MediaWiki |
+| `https://rep.local.inion/auth/` | Keycloak: страница входа, профиль, консоль администратора |
 | `https://rep.local.inion/health` | Проверка nginx |
 
-Все адреса работают и по IP сервера (`https://<IP>/...`).
+Вход один на все системы, выход из любой завершает сессию везде. Устройство SSO, роли, подключение
+LDAP/AD и Kerberos — в [SSO.md](SSO.md).
 
 ---
 
 ## 1. Требования
 
 - RED OS 8 (или другой RHEL-совместимый дистрибутив с `dnf`), x86_64.
-- 4 ГБ RAM и больше, 20 ГБ свободного места на диске.
+- 6 ГБ RAM и больше (Keycloak — Java), 25 ГБ свободного места.
 - Пользователь с правами `sudo`.
-- Доступ в интернет: пакеты RED OS и образы Docker Hub
-  (`netboxcommunity/netbox`, `postgres`, `redis`, `mediawiki`, `mariadb`, `node`, `python`).
-- Свободны порты 80 и 443. Внутренние порты 3000, 8000 и 8080 слушают только `127.0.0.1`.
+- Доступ в интернет на время установки: пакеты RED OS, Docker Hub, quay.io
+  (Keycloak, oauth2-proxy), npm и PyPI (сборка портала).
+- Свободны порты 80 и 443. Внутренние порты 3000, 4180, 8000, 8080 и 8081 слушают только `127.0.0.1`.
+- **Имя `rep.local.inion` должно резолвиться в IP сервера на всех клиентах** (DNS или hosts).
+  Единый вход привязан к имени: запросы по IP перенаправляются на `https://rep.local.inion/`.
 
 ## 2. Установка
 
@@ -31,142 +35,149 @@ cd portal
 sudo bash deploy/scripts/install.sh 2>&1 | tee ~/portal-install.log
 ```
 
-Установка занимает 10–20 минут, дольше всего скачиваются образы. Что делает скрипт:
+На чистом сервере установка занимает 20–30 минут, дольше всего скачиваются образы.
+В конце скрипт выполняет проверки и печатает `PASS`/`FAIL`; код возврата 0, только если прошли все.
 
 | Шаг | Действие |
 |---|---|
-| 1 | Ставит базовые пакеты, задаёт hostname `rep.local.inion`, добавляет запись в `/etc/hosts` |
-| 2 | Открывает http и https в firewalld |
-| 3 | Включает SELinux-флаги `httpd_can_network_connect` и `httpd_read_user_content` |
-| 4 | Ставит Docker CE и `docker compose` из репозитория RED OS. **Удаляет `podman-docker`**, если он стоит |
-| 5 | Создаёт `/opt/services/*` и копирует туда конфиги. `.env` и `LocalSettings.php` при повторном запуске сохраняются |
-| 6 | Ставит nginx, создаёт самоподписанный SSL-сертификат, устанавливает vhost |
-| 7 | Генерирует пароли в `.env` и сохраняет их в `/opt/services/credentials-YYYYMMDD.txt` |
-| 8 | Запускает NetBox и ждёт, пока он поднимется (первые миграции БД идут 3–5 минут) |
-| 9 | Ставит MediaWiki: сначала `install.php`, затем создаёт `LocalSettings.php` из шаблона |
-| 10 | Собирает и запускает портал, включает юниты systemd, добавляет в cron бэкап в 03:00 |
+| 1–3 | Пакеты, hostname `rep.local.inion`, firewalld (http/https), SELinux-флаги для nginx |
+| 4 | Docker CE и `docker compose` из репозитория RED OS. **Удаляет `podman-docker`**, если он стоит |
+| 5 | Каталоги `/opt/services/*`, копирование конфигов. `.env`, `LocalSettings.php`, данные при повторном запуске сохраняются |
+| 6 | Пароли и секреты в `.env` (только недостающие: существующие не меняются), сводка в `/opt/services/credentials-*.txt` |
+| 7 | Nginx, самоподписанный сертификат (SAN: домен и все IPv4 сервера), vhost и snippets SSO |
+| 8 | Keycloak: realm `inion`, группы, клиент, тема входа; `configure.sh` — секрет клиента, сессии, LDAP или тестовые пользователи |
+| 9 | oauth2-proxy + Redis сессий; проверка, что вход перенаправляет на Keycloak |
+| 10 | NetBox с входом по SSO; `post-install.py` — право «только просмотр» для групп и API-токен администратора |
+| 11 | MediaWiki (свой образ с Auth_remoteuser): установка базы при первом запуске, `LocalSettings.php` из шаблона |
+| 12 | Портал: сборка образа (React + FastAPI) |
+| 13 | systemd-юниты, cron бэкапа в 03:00 |
+| 14 | Smoke-проверки |
 
-Скрипт можно запускать повторно: пароли и данные при этом не теряются.
+Скрипт можно запускать повторно (обновление конфигов, после `git pull`): пароли, пользователи и данные не теряются.
 
-> Если в `dnf` подключён недоступный репозиторий `docker-ce-stable`
-> (download.docker.com), отключите его:
-> `sudo dnf config-manager --set-disabled docker-ce-stable`.
-> Docker ставится из репозитория RED OS `updates`.
+> Если в `dnf` подключён недоступный репозиторий `docker-ce-stable` (download.docker.com), отключите его:
+> `sudo dnf config-manager --set-disabled docker-ce-stable`. Docker ставится из репозитория RED OS `updates`.
 
-## 3. Пароли
+## 3. Пароли и первый вход
 
 ```bash
 sudo cat /opt/services/credentials-*.txt
-sudo grep SUPERUSER_API_TOKEN /opt/services/netbox/.env
 ```
 
-- NetBox: `admin` / пароль из файла.
-- MediaWiki: `WikiAdmin` / пароль из файла.
+| Учётная запись | Для чего |
+|---|---|
+| `admin.portal` | тестовый администратор SSO: портал (правка каталога, журнал), NetBox (суперпользователь), Вики (sysop) |
+| `user.portal` | тестовый пользователь SSO: просмотр портала, NetBox только чтение, Вики — чтение и правка |
+| `admin` (Keycloak) | консоль `https://rep.local.inion/auth/admin/` — управление пользователями и группами |
+| `admin` (NetBox), `WikiAdmin` | локальные аварийные входы мимо SSO, см. [SSO.md](SSO.md), раздел 6 |
+| NetBox API token | `Authorization: Token …` для `https://rep.local.inion/netbox/api/` (работает без SSO) |
 
-После первого входа смените пароли в веб-интерфейсе.
+Откройте `https://rep.local.inion/`, войдите как `admin.portal`, затем создайте в консоли Keycloak
+настоящих пользователей (или подключите LDAP/AD) и **отключите или удалите тестовых**.
 
 ## 4. Проверка после установки
 
-Код ответа 200 не гарантирует, что всё работает: страница ошибки MediaWiki тоже
-отдаёт 200. Поэтому проверяйте содержимое страниц:
+Smoke-проверки выполняются в конце установки. Полные автотесты (API + браузер, 9 сценариев из
+`docs/CLAUDE-TASK-SSO.md`):
 
 ```bash
-B=https://127.0.0.1
-curl -ks $B/health                                   # OK
-curl -ks $B/api/health                               # {"status":"ok",...}
-curl -ks $B/ | grep -o '<title>[^<]*'                # REP · Корпоративный портал
-curl -ksL $B/wiki/ | grep -o '<title>[^<]*'          # Корпоративная Вики
-curl -ks $B/netbox/login/ | grep -o '<title>[^<]*'   # Home | NetBox
-curl -ks -o /dev/null -w '%{http_code}\n' $B/netbox/static/setmode.js   # 200
-sudo docker ps --format '{{.Names}}\t{{.Status}}'    # 8 контейнеров, Up / healthy
+sudo bash deploy/scripts/e2e.sh
 ```
 
-Затем проверьте в браузере: войдите в NetBox и Wiki, на портале добавьте и
-удалите тестовую систему.
+Тесты временно создают пользователя `nogroup.e2e` и примерно на минуту останавливают NetBox
+(проверка честного мониторинга). Им нужен доступ к Docker Hub, mcr.microsoft.com, PyPI и npm.
+
+Быстрая ручная проверка:
+
+```bash
+curl -k https://rep.local.inion/health                     # OK
+curl -k https://rep.local.inion/api/health                 # {"status":"ok",...}
+curl -kI https://rep.local.inion/netbox/ | grep -i location # на /auth/realms/inion/... (вход)
+sudo docker ps --format '{{.Names}}\t{{.Status}}'          # 13 контейнеров, Up / healthy
+```
 
 ## 5. Доступ с клиентских компьютеров
 
-- **По имени.** Добавьте в DNS A-запись `rep.local.inion` с IP сервера или строку
-  в hosts на клиенте (`C:\Windows\System32\drivers\etc\hosts` или `/etc/hosts`):
-  `192.168.1.48 rep.local.inion`.
-- **По IP.** Работает сразу: `https://192.168.1.48/`.
-- **Сертификат.** По умолчанию самоподписанный, браузер покажет предупреждение.
-  Для рабочей эксплуатации положите сертификат корпоративного CA в
-  `/etc/nginx/ssl/rep.local.inion.{crt,key}` и выполните `sudo systemctl reload nginx`.
+- **DNS или hosts:** `192.168.1.48 rep.local.inion`
+  (`C:\Windows\System32\drivers\etc\hosts` или `/etc/hosts`).
+- **Сертификат** самоподписанный, браузер покажет предупреждение. Для эксплуатации положите сертификат
+  корпоративного УЦ в `/etc/nginx/ssl/rep.local.inion.{crt,key}` (в `.crt` — вместе с цепочкой до корневого)
+  и выполните:
+
+  ```bash
+  sudo systemctl reload nginx
+  sudo docker restart oauth2-proxy portal
+  ```
+
+  oauth2-proxy и портал проверяют TLS по этому же файлу, поэтому их нужно перезапустить.
 
 ### Если у сервера изменился IP
 
-NetBox принимает только адреса из `ALLOWED_HOSTS`, для остальных возвращает 400.
-Эти адреса прописываются при установке. После смены IP:
+Клиентам нужно обновить DNS/hosts. Перевыпустите самоподписанный сертификат с новым IP (или оставьте
+старый: доступ идёт по имени) и повторите установку:
 
 ```bash
-sudo vi /opt/services/netbox/.env
-# ALLOWED_HOSTS="rep.local.inion localhost 127.0.0.1 <НОВЫЙ_IP>"
-# CSRF_TRUSTED_ORIGINS="https://rep.local.inion https://<НОВЫЙ_IP>"
-cd /opt/services/netbox && sudo docker compose up -d
+sudo rm /etc/nginx/ssl/rep.local.inion.*
+sudo bash deploy/scripts/install.sh
 ```
-
-Лучше закрепить за сервером статический IP.
 
 ## 6. Управление
 
 | Задача | Команда |
 |---|---|
 | Статус контейнеров | `sudo docker ps` |
-| Перезапуск сервиса | `sudo systemctl restart netbox` (или `mediawiki`, `portal`) |
-| Логи | `sudo docker logs -f netbox` (или `mediawiki`, `portal`) |
+| Перезапуск сервиса | `sudo systemctl restart keycloak` (или `oauth2-proxy`, `netbox`, `mediawiki`, `portal`) |
+| Логи | `sudo docker logs -f <keycloak\|oauth2-proxy\|netbox\|mediawiki\|portal>` |
 | Логи nginx | `/var/log/nginx/rep.local.inion.{access,error}.log` |
 | Бэкап вручную | `sudo /opt/services/scripts/backup.sh` |
-| Где лежат бэкапы | `/opt/services/backups/<дата>/` |
+| Где лежат бэкапы | `/opt/services/backups/<дата>/` (базы NetBox, Вики, Keycloak, экспорт realm, файлы, `.env`) |
+| Пользователи и группы | консоль Keycloak, см. [SSO.md](SSO.md) |
 
-### Обновление портала после изменений в репозитории
+### Обновление после изменений в репозитории
 
 ```bash
 cd ~/portal && git pull
-sudo rsync -a --delete --exclude node_modules --exclude dist --exclude .env \
-  --exclude data --exclude docker-compose.yml portal/ /opt/services/portal/
-cd /opt/services/portal && sudo docker compose up -d --build
+sudo bash deploy/scripts/install.sh
 ```
 
-Каталог систем портала хранится в `/opt/services/portal/data/systems.json`
-и при обновлении не затирается.
+Каталог систем и журнал портала — в `/opt/services/portal/data/`, при обновлении не затираются.
 
-### Обновление конфигов nginx
+## 7. Портал
 
-```bash
-sudo install -m 644 ~/portal/deploy/nginx/rep.local.inion.conf /etc/nginx/conf.d/
-sudo nginx -t && sudo systemctl reload nginx
-```
+- **Права:** изменять каталог (добавление, правка, удаление, импорт, сброс) и смотреть журнал могут только
+  члены `portal-admins`. Остальные видят каталог и мониторинг. Права проверяет сервер.
+- **Удаление:** меню «⋯» на карточке → «Удалить» → подтверждение. 8 секунд можно отменить из уведомления.
+  Встроенные системы (NetBox, Вики) тоже можно удалить, «Настройки → Сброс» возвращает исходный состав.
+- **Мониторинг:** сервер портала проверяет системы напрямую по внутренним адресам, в обход SSO
+  (через Nginx любая страница отвечает переадресацией на вход). Для новой системы укажите
+  «Внутренний адрес проверки», например `http://grafana:3000/api/health`, иначе статус будет «Нет данных».
+- **Журнал действий** хранится на сервере и показывает автора каждого изменения.
+- Горячие клавиши: `Ctrl+K` — поиск и команды, `/` — поиск по каталогу, `N` — добавить систему.
 
-## 7. Портал: добавление и удаление систем
-
-- Кнопка **«Добавить»**: название, описание, URL (например `/grafana/` или
-  `https://host/`) и, при желании, отдельный URL для проверки статуса.
-- Кнопка **«✕ Удалить»** на карточке открывает окно подтверждения. Удалить
-  можно любую карточку, в том числе встроенные (Портал, NetBox, MediaWiki).
-  Удаляется только карточка, сам сервис продолжает работать.
-- Кнопка **«Восстановить стандартные»** появляется, если удалена хотя бы одна
-  встроенная карточка, и возвращает её на место.
-
-API: `GET/POST /api/systems`, `DELETE /api/systems/{id}`,
-`POST /api/systems/restore-defaults`, `GET /api/systems/{id}/status`.
+API (за SSO): `GET /api/me`, `GET/POST /api/systems`, `PUT/DELETE /api/systems/{id}`, `PUT /api/systems`,
+`POST /api/systems/restore-defaults`, `GET /api/audit`, `GET /api/status`, `POST /api/status/refresh`.
+Без входа: `GET /api/health`.
 
 ## 8. Устранение неполадок
 
-Ниже проблемы, которые встретились при реальной установке, и их решения.
-Все они уже исправлены в скриптах репозитория.
+Проблемы, найденные на реальных установках. Все исправлены в скриптах репозитория.
 
 | Симптом | Причина | Решение |
 |---|---|---|
-| `install.sh` падает на `systemctl enable --now docker` | `docker` — это эмуляция через podman (`podman-docker`) | Шаг 4 удаляет `podman-docker` и ставит Docker CE |
-| `.env: строка N: localhost: команда не найдена` | Значения с пробелами в `.env` были без кавычек | `gen-env.sh` заключает их в кавычки |
-| Wiki: `LocalSettings.php not readable` | Файл `root:root 640`, а веб-сервер в контейнере работает от `www-data` | `chown root:33 LocalSettings.php; chmod 640` |
-| Wiki: `Failed opening required LocalSettings.php` при установке | Override-файл Compose объединял списки volumes, и Docker создал на месте файла каталог | `volumes: !override` в `docker-compose.install.yml` |
-| NetBox: `Bad Request (400)` по IP | IP нет в `ALLOWED_HOSTS` | См. раздел 5, «Если у сервера изменился IP» |
-| NetBox: `Ошибка статичных медиа ... setmode.js` | В контейнере статика отдаётся только по `/static/`, а NetBox ссылается на `/netbox/static/` | `location /netbox/static/` в nginx |
-| Портал: 502, контейнер `portal` перезапускается | FastAPI: `Status code 204 must not have a response body` | Исправлено в `app.py` |
-| Повторный `install.sh` ломает NetBox и Wiki (ошибки пароля БД) | `rsync --delete` стирал `.env`, генерировались новые пароли | `rsync --exclude .env --exclude LocalSettings.php` |
-| `install.sh` падает на шаге cron | Пустой crontab, `grep -v` возвращает 1 при `pipefail` | `grep -v ... \|\| true` |
+| `install.sh` падает на `systemctl enable --now docker` | `docker` — это эмуляция через podman (`podman-docker`) | шаг 4 удаляет `podman-docker` и ставит Docker CE |
+| `.env: строка N: localhost: команда не найдена` | значения с пробелами в `.env` без кавычек | `gen-env.sh` заключает их в кавычки |
+| Вики: `LocalSettings.php not readable` | файл `root:root 640`, а веб-сервер в контейнере — `www-data` | `chown root:33`, `chmod 640` (делает `install-wiki.sh`) |
+| Вики: `Failed opening required LocalSettings.php` при установке | override Compose объединял списки volumes, и Docker создавал каталог | `volumes: !override` в `docker-compose.install.yml` |
+| NetBox: `Ошибка статичных медиа ... setmode.js` | статика в контейнере отдаётся только по `/static/` | `location /netbox/static/` в nginx |
+| Портал: 502, контейнер перезапускается | FastAPI: `Status code 204 must not have a response body` | исправлено в `app.py` |
+| Повторный `install.sh` ломает NetBox и Вики | `rsync --delete` стирал `.env` | `.env`, `LocalSettings.php`, данные исключены из синхронизации |
+| `install.sh` падает на шаге cron | пустой crontab + `pipefail` | `grep -v ... \|\| true` |
+| 403 `invalid_scope` после входа в Keycloak | oauth2-proxy запрашивал scope `groups`, которого нет в realm | `--scope=openid email profile` |
+| API NetBox: `Invalid v1 token` | netbox-docker 5.x не создаёт токен из `SUPERUSER_API_TOKEN`; токены v2 требуют pepper | `post-install.py` создаёт токен, `API_TOKEN_PEPPER_1` включает v2 |
+| `nginx: open() "/etc/nginx/mime.types" failed` | `/etc/nginx` удалён вручную, а пакеты nginx остались | `install.sh` переустанавливает пакеты `nginx*`, если нет их файлов |
+| Keycloak «healthy», но `kcadm` получает 503 | проверка готовности искала `"UP"` и срабатывала на вложенных проверках | проверяется HTTP 200 от `/health/ready` |
+
+Ошибки единого входа (redirect loop, 502 too big header, неверный issuer, сертификат) — в [SSO.md](SSO.md), раздел 7.
 
 Общая диагностика:
 
@@ -175,19 +186,13 @@ sudo docker ps -a                     # какие контейнеры не Up
 sudo docker logs --tail 50 <имя>      # причина падения
 sudo nginx -t                         # синтаксис nginx
 sudo ausearch -m avc -ts recent       # блокировки SELinux
-sudo ss -ltnp | grep -E ':(80|443|3000|8000|8080)\b'
 ```
 
 ## 9. Полное удаление
 
-**Внимание:** удаляются все данные NetBox и Wiki.
+**Внимание:** удаляются все данные NetBox, Вики, Keycloak и портала.
 
 ```bash
-for s in portal mediawiki netbox; do
-  sudo systemctl disable --now $s
-  (cd /opt/services/$s && sudo docker compose down -v)
-done
-sudo rm -f /etc/systemd/system/{portal,mediawiki,netbox}.service /etc/nginx/conf.d/rep.local.inion.conf
-sudo systemctl daemon-reload && sudo systemctl reload nginx
-sudo rm -rf /opt/services
+sudo bash deploy/scripts/uninstall.sh --yes            # контейнеры, тома, образы, конфиги, юниты, cron, сертификаты
+sudo bash deploy/scripts/uninstall.sh --yes --purge    # плюс пакеты Docker CE и nginx, возврат podman-docker
 ```

@@ -1,24 +1,28 @@
 # Installed copy lives at /opt/services/portal
 # Source of truth for build context is the repo portal/ directory.
-# install.sh syncs portal sources here before first build.
+# install.sh syncs portal sources here before the build.
 
 services:
   portal:
     build: .
-    image: rep-portal:1.0.0
+    image: rep-portal:2.0.0
     container_name: portal
+    env_file: .env
     ports:
       - "127.0.0.1:3000:3000"
     environment:
+      PORTAL_ENV: prod
       PORTAL_DATA_DIR: /data
       PORTAL_STATIC_DIR: /app/static
-      # Probe through host nginx (published ports on host gateway)
-      PORTAL_PROBE_BASE: https://rep.local.inion
+      PORTAL_DOMAIN: ${DOMAIN:-rep.local.inion}
+      # Gateway check goes through the host Nginx; built-in systems are probed directly
+      PORTAL_PROBE_BASE: https://${DOMAIN:-rep.local.inion}
+      PORTAL_CA_FILE: /etc/portal/ca.crt
     extra_hosts:
-      - "host.docker.internal:host-gateway"
-      - "rep.local.inion:host-gateway"
+      - "${DOMAIN:-rep.local.inion}:host-gateway"
     volumes:
       - ./data:/data
+      - /etc/nginx/ssl/${DOMAIN:-rep.local.inion}.crt:/etc/portal/ca.crt:ro
     restart: unless-stopped
     networks:
       - services-network
