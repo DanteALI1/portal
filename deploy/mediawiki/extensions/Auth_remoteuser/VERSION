@@ -1,0 +1,4 @@
+Auth_remoteuser 2.1.1, branch REL1_41
+https://github.com/wikimedia/mediawiki-extensions-Auth_remoteuser
+commit 4564c120c3fe2b348ec1c860d35bcb7b258c6761 (2024-11-22)
+Vendored so the image builds without internet access. License: GPL-2.0-or-later (COPYING).
