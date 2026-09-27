@@ -82,13 +82,13 @@
 2. Убедись, что в коммит НЕ попадут секреты и мусор. Ни один из этих путей не должен
    быть в выводе `git status --porcelain`:
    .env, *.env (кроме env.example), LocalSettings.php, LocalSettings.generated.php,
-   credentials-*.txt, node_modules/, dist/, portal/data/, *.log, *.bak, *.patch
+   credentials-*.txt, test-users.env, *.keytab, node_modules/, dist/, portal/data/, *.log, *.bak, *.patch
    Дополнительно выполни:
    git diff | grep -nEi '(password|secret|token)\s*=\s*["'"'"']?[A-Za-z0-9]{12,}' || echo "no secrets"
    Если что-то нашлось — остановись и покажи мне.
 
 3. Проверь синтаксис:
-   for f in deploy/scripts/*.sh; do bash -n "$f" && echo "OK $f"; done
+   for f in deploy/scripts/*.sh deploy/keycloak/configure.sh; do bash -n "$f" && echo "OK $f"; done
    python3 -c "import ast;ast.parse(open('portal/backend/app.py').read())"
    (если есть node) cd portal/frontend && npm ci && npm run build && cd ../..
 
@@ -96,37 +96,25 @@
    git fetch origin
    git stash
    git checkout main && git pull --ff-only origin main
-   git checkout -b fix/red-os-deploy
+   git checkout -b <имя-ветки>    # например fix/<что-исправляем>
    git stash pop
    Если stash pop дал конфликт — остановись и покажи конфликтующие файлы.
 
-5. Добавь файлы ЯВНО по списку (не `git add -A`):
-   git add .gitattributes README.md docs/DEPLOY.md docs/CURSOR-PUSH.md \
-     deploy/scripts/install.sh deploy/scripts/gen-env.sh deploy/scripts/install-wiki.sh \
-     deploy/mediawiki/docker-compose.install.yml deploy/mediawiki/LocalSettings.template.php \
-     deploy/nginx/rep.local.inion.conf \
-     portal/backend/app.py portal/frontend/src/App.jsx portal/frontend/src/styles.css
-   git status   # покажи, что staged только эти файлы
+5. Добавь файлы ЯВНО, по одному или по каталогам, которые показал git status (не `git add -A`),
+   пропуская всё из списка в шаге 2:
+   git add <файлы и каталоги из git status>
+   git status   # покажи, что staged только нужные файлы
 
-6. Коммит:
-   git commit -m "Fix RED OS 8 deployment; allow deleting systems in portal" \
-     -m "- install.sh: replace podman-docker shim with Docker CE from RED OS repos
-   - install.sh: keep .env / LocalSettings.php on re-run; fix cron step under pipefail
-   - gen-env.sh: quote values with spaces; add server IPs to ALLOWED_HOSTS / CSRF_TRUSTED_ORIGINS
-   - mediawiki: !override volumes for install phase; LocalSettings readable by www-data; host-aware wgServer
-   - nginx: serve NetBox static files at /netbox/static/
-   - portal: fix 204 DELETE crash; delete any card incl. built-ins, confirm dialog, restore defaults
-   - docs: DEPLOY.md (deployment guide), CURSOR-PUSH.md; .gitattributes for LF"
+6. Коммит с понятным сообщением: первая строка — что сделано, ниже — список изменений:
+   git commit -m "<кратко, что сделано>" -m "<подробности>"
 
 7. Отправка:
-   git push -u origin fix/red-os-deploy
+   git push -u origin <имя-ветки>
    Если спрашивает пароль — это нужен токен/gh auth, остановись и скажи мне.
 
 8. Pull Request (если установлен gh):
-   gh pr create --base main --head fix/red-os-deploy \
-     --title "Fix RED OS 8 deployment; allow deleting systems in portal" \
-     --body "См. docs/DEPLOY.md, раздел «Устранение неполадок». Проверено на RED OS 8.0.3."
-   Если gh нет — дай мне ссылку https://github.com/DanteALI1/portal/compare/main...fix/red-os-deploy
+   gh pr create --base main --head <имя-ветки> --title "<заголовок>" --body "<что и как проверено>"
+   Если gh нет — дай мне ссылку https://github.com/DanteALI1/portal/compare/main...<имя-ветки>
 ```
 
 ---
@@ -145,6 +133,6 @@
 
 ## Проверка результата
 
-- На GitHub в ветке `fix/red-os-deploy` 13 изменённых или новых файлов, среди
-  них нет `.env`, `LocalSettings.php` и `credentials-*.txt`.
+- На GitHub в новой ветке только нужные файлы, среди них нет `.env`, `LocalSettings.php`,
+  `credentials-*.txt`, `test-users.env` и `*.keytab`.
 - После слияния PR новая установка по [DEPLOY.md](DEPLOY.md) проходит без ручных правок.
