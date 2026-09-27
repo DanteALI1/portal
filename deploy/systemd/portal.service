@@ -1,7 +1,7 @@
 [Unit]
 Description=Corporate Server Portal
 Requires=docker.service
-After=docker.service network-online.target
+After=docker.service network-online.target keycloak.service oauth2-proxy.service
 Wants=network-online.target
 
 [Service]

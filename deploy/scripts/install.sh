@@ -1,42 +1,45 @@
 #!/usr/bin/env bash
-# Full install of REP unified portal on Red OS 8 / RHEL 8 compatible hosts.
-# Usage (from repo root, as a user with sudo):
-#   sudo bash deploy/scripts/install.sh
+# Full install of the REP unified portal with single sign-on on Red OS 8 / RHEL 8 compatible hosts.
+# Usage (from repo root):  sudo bash deploy/scripts/install.sh
+# Idempotent: re-running keeps passwords, data and LocalSettings secrets.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SERVICES_ROOT="${SERVICES_ROOT:-/opt/services}"
 DOMAIN="${DOMAIN:-rep.local.inion}"
+NGINX_SNIPPETS=/etc/nginx/rep
+TOTAL=14
 
 log() { echo -e "\n==> $*\n"; }
+step() { log "$1/${TOTAL} $2"; }
 
 if [[ "${EUID}" -ne 0 ]]; then
   echo "Run as root: sudo bash $0" >&2
   exit 1
 fi
 
-log "0/10 Preflight"
+step 0 "Preflight"
 command -v dnf >/dev/null || { echo "dnf required (Red OS / RHEL family)"; exit 1; }
 
-log "1/10 Packages & hostname"
-dnf install -y git curl wget vim openssl firewalld || true
+step 1 "Packages & hostname"
+dnf install -y git curl wget vim openssl firewalld rsync policycoreutils-python-utils || true
 hostnamectl set-hostname "${DOMAIN}" || true
 grep -q "${DOMAIN}" /etc/hosts || echo "127.0.0.1 ${DOMAIN}" >> /etc/hosts
 
-log "2/10 Firewall"
+step 2 "Firewall"
 if systemctl is-active --quiet firewalld || systemctl enable --now firewalld; then
   firewall-cmd --permanent --add-service=http || true
   firewall-cmd --permanent --add-service=https || true
   firewall-cmd --reload || true
 fi
 
-log "3/10 SELinux booleans"
+step 3 "SELinux booleans"
 if command -v getenforce >/dev/null && [[ "$(getenforce)" != "Disabled" ]]; then
   setsebool -P httpd_can_network_connect 1 || true
   setsebool -P httpd_read_user_content 1 || true
 fi
 
-log "4/10 Docker Engine"
+step 4 "Docker Engine"
 # On Red OS `docker` may be the podman-docker shim — treat it as "no Docker".
 if ! command -v docker >/dev/null || rpm -q podman-docker >/dev/null 2>&1; then
   dnf remove -y podman-docker 2>/dev/null || true
@@ -49,7 +52,6 @@ if ! command -v docker >/dev/null || rpm -q podman-docker >/dev/null 2>&1; then
     dnf install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
   fi
 fi
-docker compose version
 
 mkdir -p /etc/docker
 cat > /etc/docker/daemon.json <<'EOF'
@@ -61,95 +63,157 @@ cat > /etc/docker/daemon.json <<'EOF'
 }
 EOF
 systemctl enable --now docker
+docker compose version
 
 docker network inspect services-network >/dev/null 2>&1 || \
   docker network create --driver bridge --subnet 172.28.0.0/16 --gateway 172.28.0.1 services-network
 
-log "5/10 Directory layout"
+step 5 "Directory layout"
 mkdir -p \
-  "${SERVICES_ROOT}"/{netbox,mediawiki,portal/data,configs,backups,scripts} \
+  "${SERVICES_ROOT}"/{netbox,mediawiki,portal/data,keycloak,oauth2-proxy,configs,backups,scripts} \
   /var/log/services
 chmod 700 "${SERVICES_ROOT}/backups"
 
-# Sync deploy assets
-rsync -a --delete --exclude .env "${REPO_ROOT}/deploy/netbox/" "${SERVICES_ROOT}/netbox/"
-rsync -a --delete --exclude .env --exclude LocalSettings.php --exclude LocalSettings.generated.php "${REPO_ROOT}/deploy/mediawiki/" "${SERVICES_ROOT}/mediawiki/"
+# Sync deploy assets. Never delete generated secrets / state on re-run.
+KEEP=(--exclude .env --exclude LocalSettings.php --exclude LocalSettings.generated.php
+      --exclude test-users.env --exclude '*.keytab' --exclude data)
+rsync -a --delete "${KEEP[@]}" "${REPO_ROOT}/deploy/netbox/" "${SERVICES_ROOT}/netbox/"
+rsync -a --delete "${KEEP[@]}" "${REPO_ROOT}/deploy/mediawiki/" "${SERVICES_ROOT}/mediawiki/"
+rsync -a --delete "${KEEP[@]}" "${REPO_ROOT}/deploy/keycloak/" "${SERVICES_ROOT}/keycloak/"
+rsync -a --delete "${KEEP[@]}" "${REPO_ROOT}/deploy/oauth2-proxy/" "${SERVICES_ROOT}/oauth2-proxy/"
 rsync -a "${REPO_ROOT}/deploy/scripts/" "${SERVICES_ROOT}/scripts/"
 # Portal application sources
-rsync -a --delete \
-  --exclude node_modules --exclude dist --exclude .env \
+rsync -a --delete "${KEEP[@]}" --exclude node_modules --exclude dist \
   "${REPO_ROOT}/portal/" "${SERVICES_ROOT}/portal/"
 cp "${REPO_ROOT}/deploy/portal/docker-compose.yml" "${SERVICES_ROOT}/portal/docker-compose.yml"
-chmod +x "${SERVICES_ROOT}/scripts/"*.sh
+chmod +x "${SERVICES_ROOT}/scripts/"*.sh "${SERVICES_ROOT}/keycloak/configure.sh"
 
-log "6/10 Nginx + SSL"
+step 6 "Generate secrets"
+REPO_ROOT="${REPO_ROOT}" bash "${SERVICES_ROOT}/scripts/gen-env.sh" "${SERVICES_ROOT}"
+
+step 7 "Nginx + SSL"
+# Nginx comes before the services: oauth2-proxy reads Keycloak's OIDC discovery through it.
 dnf install -y nginx
 bash "${SERVICES_ROOT}/scripts/generate-ssl.sh" /etc/nginx/ssl "${DOMAIN}"
-install -m 644 "${REPO_ROOT}/deploy/nginx/rep.local.inion.conf" \
-  /etc/nginx/conf.d/rep.local.inion.conf
-# Disable default server if it conflicts
+mkdir -p "${NGINX_SNIPPETS}" /usr/share/nginx/rep
+install -m 644 "${REPO_ROOT}"/deploy/nginx/snippets/*.conf "${NGINX_SNIPPETS}/"
+install -m 644 "${REPO_ROOT}/deploy/nginx/html/403.html" /usr/share/nginx/rep/403.html
+# Keycloak admin console allow-list from KEYCLOAK_ADMIN_ALLOW
+KC_ALLOW="$(grep -m1 '^KEYCLOAK_ADMIN_ALLOW=' "${SERVICES_ROOT}/keycloak/.env" | cut -d= -f2- | tr -d '"')"
+{
+  echo "# Generated by install.sh from KEYCLOAK_ADMIN_ALLOW in ${SERVICES_ROOT}/keycloak/.env"
+  for net in ${KC_ALLOW:-127.0.0.1}; do echo "allow ${net};"; done
+  echo "deny all;"
+} > "${NGINX_SNIPPETS}/keycloak-admin-allow.conf"
+install -m 644 "${REPO_ROOT}/deploy/nginx/rep.local.inion.conf" /etc/nginx/conf.d/rep.local.inion.conf
 rm -f /etc/nginx/conf.d/default.conf 2>/dev/null || true
+if command -v restorecon >/dev/null; then restorecon -R /etc/nginx /usr/share/nginx/rep || true; fi
 nginx -t
 systemctl enable --now nginx
 systemctl reload nginx
 
-log "7/10 Generate secrets"
-bash "${SERVICES_ROOT}/scripts/gen-env.sh" "${SERVICES_ROOT}"
+wait_http() { # description url expected_code [attempts]
+  local what="$1" url="$2" want="$3" n="${4:-60}" code=""
+  for _ in $(seq 1 "${n}"); do
+    code="$(curl -ks -o /dev/null -w '%{http_code}' --resolve "${DOMAIN}:443:127.0.0.1" "${url}" || true)"
+    [[ "${code}" == "${want}" ]] && { echo "[wait] ${what}: HTTP ${code}"; return 0; }
+    sleep 5
+  done
+  echo "[wait] ERROR: ${what} did not answer ${want} (last: ${code})" >&2
+  return 1
+}
 
-log "8/10 Start NetBox"
-cd "${SERVICES_ROOT}/netbox"
-docker compose pull
+step 8 "Keycloak (SSO)"
+cd "${SERVICES_ROOT}/keycloak"
+docker compose pull --quiet
 docker compose up -d
-echo "Waiting for NetBox health (up to ~5 min)..."
-for i in $(seq 1 60); do
-  if curl -kfsS "https://127.0.0.1/netbox/login/" -H "Host: ${DOMAIN}" >/dev/null 2>&1 \
-    || curl -fsS "http://127.0.0.1:8000/netbox/login/" >/dev/null 2>&1; then
-    echo "NetBox is up"
-    break
-  fi
+bash "${SERVICES_ROOT}/keycloak/configure.sh"
+wait_http "Keycloak OIDC discovery via Nginx" \
+  "https://${DOMAIN}/auth/realms/inion/.well-known/openid-configuration" 200
+
+step 9 "oauth2-proxy"
+cd "${SERVICES_ROOT}/oauth2-proxy"
+docker compose pull --quiet
+docker compose up -d --force-recreate
+for _ in $(seq 1 30); do curl -fsS http://127.0.0.1:4180/ping >/dev/null 2>&1 && break; sleep 3; done
+wait_http "oauth2-proxy login redirect" "https://${DOMAIN}/oauth2/start?rd=%2F" 302
+
+step 10 "NetBox"
+cd "${SERVICES_ROOT}/netbox"
+docker compose pull --quiet
+docker compose up -d
+echo "Waiting for NetBox health (first start runs migrations, up to ~5 min)..."
+for _ in $(seq 1 60); do
+  [[ "$(docker inspect -f '{{.State.Health.Status}}' netbox 2>/dev/null)" == healthy ]] && { echo "NetBox is up"; break; }
   sleep 5
 done
+docker exec -i netbox /opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py nbshell \
+  < "${SERVICES_ROOT}/netbox/sso-permissions.py" 2>/dev/null | grep '^\[netbox\]' || \
+  echo "[netbox] WARNING: could not apply SSO read-only permission" >&2
 
-log "9/10 Start MediaWiki"
+step 11 "MediaWiki"
 bash "${SERVICES_ROOT}/scripts/install-wiki.sh"
 
-log "10/10 Start Portal + systemd + backup cron"
+step 12 "Portal"
 cd "${SERVICES_ROOT}/portal"
 docker compose up -d --build
 
+step 13 "systemd + backup cron"
 install -m 644 "${REPO_ROOT}/deploy/systemd/"*.service /etc/systemd/system/
 systemctl daemon-reload
-systemctl enable netbox.service mediawiki.service portal.service
+systemctl enable keycloak.service oauth2-proxy.service netbox.service mediawiki.service portal.service
 
-# Cron backup at 03:00
+# Cron backup at 03:00 (grep -v returns 1 on an empty crontab — tolerate it under pipefail)
 CRON_LINE="0 3 * * * ${SERVICES_ROOT}/scripts/backup.sh >> /var/log/services/backup.log 2>&1"
 { crontab -l 2>/dev/null | grep -v backup.sh || true; echo "${CRON_LINE}"; } | crontab -
 
 systemctl reload nginx || systemctl restart nginx
 
-log "Smoke checks"
-set +e
-curl -kI "https://${DOMAIN}/health"
-curl -kI "https://${DOMAIN}/"
-curl -kI "https://${DOMAIN}/api/health"
-curl -kI "https://${DOMAIN}/netbox/"
-curl -kI "https://${DOMAIN}/wiki/"
-set -e
+step 14 "Smoke checks"
+FAILS=0
+check() { # description url expected_code [location-substring]
+  local what="$1" url="$2" want="$3" loc_want="${4:-}" out code loc
+  out="$(curl -ks -o /dev/null -w '%{http_code} %{redirect_url}' --resolve "${DOMAIN}:443:127.0.0.1" \
+    --resolve "${DOMAIN}:80:127.0.0.1" "${url}" || true)"
+  code="${out%% *}"; loc="${out#* }"
+  if [[ "${code}" == "${want}" && ( -z "${loc_want}" || "${loc}" == *"${loc_want}"* ) ]]; then
+    printf '  PASS  %-48s %s\n' "${what}" "${code}"
+  else
+    printf '  FAIL  %-48s got %s %s (want %s %s)\n' "${what}" "${code}" "${loc}" "${want}" "${loc_want}"
+    FAILS=$((FAILS + 1))
+  fi
+}
+for _ in $(seq 1 24); do curl -fsS http://127.0.0.1:3000/api/health >/dev/null 2>&1 && break; sleep 5; done
+check "nginx /health"                           "https://${DOMAIN}/health" 200
+check "portal /api/health (no SSO)"             "https://${DOMAIN}/api/health" 200
+check "portal / -> login"                       "https://${DOMAIN}/" 302 "/oauth2/start"
+check "portal /api/me without session -> 401"   "https://${DOMAIN}/api/me" 401
+check "netbox /netbox/ -> login"                "https://${DOMAIN}/netbox/" 302 "/oauth2/start"
+check "netbox API without token -> 403"         "https://${DOMAIN}/netbox/api/dcim/sites/" 403
+check "netbox static"                           "https://${DOMAIN}/netbox/static/setmode.js" 200
+check "wiki /wiki/ -> login"                    "https://${DOMAIN}/wiki/" 302 "/oauth2/start"
+check "oauth2 start -> Keycloak"                "https://${DOMAIN}/oauth2/start?rd=%2F" 302 "/auth/realms/inion/protocol/openid-connect/auth"
+check "keycloak realm discovery"                "https://${DOMAIN}/auth/realms/inion/.well-known/openid-configuration" 200
+check "http -> https"                           "http://${DOMAIN}/" 301 "https://${DOMAIN}/"
 
 cat <<EOF
 
 ============================================================
-INSTALL COMPLETE
+INSTALL COMPLETE$( [[ ${FAILS} -gt 0 ]] && echo " — ${FAILS} SMOKE CHECK(S) FAILED" || true )
 ============================================================
-Portal:   https://${DOMAIN}/
+Portal:   https://${DOMAIN}/          (single sign-on via Keycloak)
 NetBox:   https://${DOMAIN}/netbox/
 Wiki:     https://${DOMAIN}/wiki/
+Keycloak: https://${DOMAIN}/auth/admin/  (admin console, allowed networks only)
 Health:   https://${DOMAIN}/health
 
-Credentials: ${SERVICES_ROOT}/credentials-*.txt
+Credentials: $(ls -1t "${SERVICES_ROOT}"/credentials-*.txt | head -1)
 Configs:     ${SERVICES_ROOT}/
 
-DNS: ensure ${DOMAIN} points to this server IP on clients.
+DNS: ${DOMAIN} must resolve to this server on every client (SSO is bound to the name;
+     requests by IP are redirected to https://${DOMAIN}/).
 SSL: self-signed by default — replace under /etc/nginx/ssl/ for production.
+Tests: sudo bash ${SERVICES_ROOT}/scripts/e2e.sh
 ============================================================
 EOF
+exit $(( FAILS > 0 ? 1 : 0 ))
