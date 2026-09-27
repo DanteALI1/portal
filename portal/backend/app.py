@@ -135,6 +135,13 @@ async def replace_systems(
 ) -> list[dict]:
     """Replace the whole catalog (import from JSON or reset)."""
     stamp = store.now_iso()
+    if action == "reset":
+        # Reset always returns the server-side built-ins (with their internal health URLs)
+        items = store.defaults()
+        store.save(items)
+        store.audit(user.username, user.name, "reset", "Каталог", "", "Восстановлен исходный состав")
+        await monitor.run()
+        return items
     items: list[dict] = []
     for p in payload:
         item = store.normalize({**p.model_dump(), "createdAt": p.createdAt or stamp, "updatedAt": stamp})
@@ -144,10 +151,7 @@ async def replace_systems(
                 "detail": f"Повторяется система «{item['name']}»", "fields": errors})
         items.append(item)
     store.save(items)
-    if action == "reset":
-        store.audit(user.username, user.name, "reset", "Каталог", "", "Восстановлен исходный состав")
-    else:
-        store.audit(user.username, user.name, "import", source or "Каталог", "", f"Загружено систем: {len(items)}")
+    store.audit(user.username, user.name, "import", source or "Каталог", "", f"Загружено систем: {len(items)}")
     await monitor.run()
     return items
 
