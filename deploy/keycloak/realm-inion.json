@@ -1,0 +1,90 @@
+{
+  "realm": "inion",
+  "enabled": true,
+  "displayName": "Портал сервисов",
+  "displayNameHtml": "<span class=\"rep-brand\">Портал сервисов</span>",
+  "loginTheme": "rep",
+  "internationalizationEnabled": true,
+  "supportedLocales": ["ru", "en"],
+  "defaultLocale": "ru",
+  "registrationAllowed": false,
+  "resetPasswordAllowed": false,
+  "rememberMe": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "sslRequired": "external",
+  "bruteForceProtected": true,
+  "permanentLockout": false,
+  "failureFactor": 5,
+  "waitIncrementSeconds": 60,
+  "maxFailureWaitSeconds": 900,
+  "minimumQuickLoginWaitSeconds": 60,
+  "quickLoginCheckMilliSeconds": 1000,
+  "maxDeltaTimeSeconds": 43200,
+  "passwordPolicy": "length(12) and notUsername and notEmail",
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "accessTokenLifespan": 300,
+  "groups": [
+    { "name": "portal-users" },
+    { "name": "portal-admins" },
+    { "name": "netbox-admins" },
+    { "name": "wiki-admins" }
+  ],
+  "clients": [
+    {
+      "clientId": "rep-portal",
+      "name": "REP Portal (oauth2-proxy)",
+      "description": "Единый вход для портала, NetBox и Вики на rep.local.inion",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "clientAuthenticatorType": "client-secret",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "frontchannelLogout": false,
+      "rootUrl": "https://rep.local.inion",
+      "baseUrl": "/",
+      "redirectUris": ["https://rep.local.inion/oauth2/callback"],
+      "webOrigins": ["https://rep.local.inion"],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "https://rep.local.inion/*",
+        "backchannel.logout.session.required": "true"
+      },
+      "protocolMappers": [
+        {
+          "name": "groups",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-group-membership-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "groups",
+            "full.path": "false",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        },
+        {
+          "name": "preferred_username",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-property-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "username",
+            "claim.name": "preferred_username",
+            "jsonType.label": "String",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ]
+}

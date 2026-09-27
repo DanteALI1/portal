@@ -15,3 +15,7 @@ portal/frontend/dist/
 portal/data/
 deploy/portal/data/
 *.log
+
+# SSO secrets
+**/*.keytab
+deploy/keycloak/test-users.env
