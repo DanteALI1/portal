@@ -1,0 +1,5 @@
+# Temporary override for first-time install (no LocalSettings.php yet)
+services:
+  mediawiki:
+    volumes:
+      - wiki-images:/var/www/html/images

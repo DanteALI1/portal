@@ -1,0 +1,49 @@
+# MediaWiki for https://rep.local.inion/wiki/
+# First boot: do NOT mount LocalSettings.php (see install-wiki.sh)
+# Requires external network: services-network
+
+services:
+  mediawiki:
+    image: docker.io/mediawiki:1.41
+    container_name: mediawiki
+    depends_on:
+      mariadb:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:8080:80"
+    volumes:
+      - wiki-images:/var/www/html/images
+      # Mounted only after CLI install (file is created by install-wiki.sh)
+      - ./LocalSettings.php:/var/www/html/LocalSettings.php:ro
+    restart: unless-stopped
+    networks:
+      - services-network
+
+  mariadb:
+    image: docker.io/mariadb:10.11
+    container_name: wiki-mariadb
+    env_file: .env
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MARIADB_DATABASE:-mediawiki}
+      MYSQL_USER: ${MARIADB_USER:-wiki}
+      MYSQL_PASSWORD: ${MARIADB_PASSWORD}
+    volumes:
+      - mariadb-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - services-network
+
+volumes:
+  wiki-images:
+  mariadb-data:
+
+networks:
+  services-network:
+    external: true

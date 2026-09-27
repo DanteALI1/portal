@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.env
+*.env
+!.env.example
+!**/*.example
+**/LocalSettings.php
+**/LocalSettings.generated.php
+**/credentials-*.txt
+__pycache__/
+*.pyc
+.DS_Store
+.vite/
+portal/frontend/dist/
+portal/data/
+deploy/portal/data/
+*.log

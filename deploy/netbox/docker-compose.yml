@@ -1,0 +1,117 @@
+# NetBox stack for https://rep.local.inion/netbox/
+# Image v4.7+ uses Granian — BASE_PATH works under a subdirectory.
+# Requires external network: services-network
+
+services:
+  netbox: &netbox
+    image: docker.io/netboxcommunity/netbox:${VERSION:-v4.7-5.1.1}
+    container_name: netbox
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      redis-cache:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      SKIP_SUPERUSER: ${SKIP_SUPERUSER:-false}
+      BASE_PATH: ${BASE_PATH:-netbox/}
+    user: "netbox:root"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/netbox/login/ >/dev/null || exit 1"]
+      start_period: 240s
+      timeout: 5s
+      interval: 15s
+      retries: 20
+    ports:
+      - "127.0.0.1:8000:8080"
+    volumes:
+      - ./configuration:/etc/netbox/config:ro
+      - netbox-media:/opt/netbox/netbox/media
+      - netbox-reports:/opt/netbox/netbox/reports
+      - netbox-scripts:/opt/netbox/netbox/scripts
+    restart: unless-stopped
+    networks:
+      - services-network
+
+  netbox-worker:
+    <<: *netbox
+    container_name: netbox-worker
+    depends_on:
+      netbox:
+        condition: service_healthy
+    command:
+      - /opt/netbox/venv/bin/python
+      - /opt/netbox/netbox/manage.py
+      - rqworker
+    healthcheck:
+      test: ["CMD-SHELL", "ps -aux | grep -v grep | grep -q rqworker || exit 1"]
+      start_period: 30s
+      timeout: 3s
+      interval: 15s
+    ports: []
+
+  postgres:
+    image: docker.io/postgres:16-alpine
+    container_name: netbox-postgres
+    env_file: .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-netbox}
+      POSTGRES_USER: ${POSTGRES_USER:-netbox}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    restart: unless-stopped
+    networks:
+      - services-network
+
+  redis:
+    image: docker.io/redis:7-alpine
+    container_name: netbox-redis
+    command: ["sh", "-c", "redis-server --appendonly yes --requirepass \"$$REDIS_PASSWORD\""]
+    env_file: .env
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_PASSWORD\" ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+    networks:
+      - services-network
+
+  redis-cache:
+    image: docker.io/redis:7-alpine
+    container_name: netbox-redis-cache
+    command: ["sh", "-c", "redis-server --requirepass \"$$REDIS_CACHE_PASSWORD\""]
+    env_file: .env
+    volumes:
+      - redis-cache-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_CACHE_PASSWORD\" ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+    networks:
+      - services-network
+
+volumes:
+  netbox-media:
+  netbox-reports:
+  netbox-scripts:
+  postgres-data:
+  redis-data:
+  redis-cache-data:
+
+networks:
+  services-network:
+    external: true
