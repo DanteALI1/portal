@@ -122,6 +122,7 @@ ensure_kv "${NB}" SUPERUSER_NAME admin
 ensure_kv "${NB}" SUPERUSER_EMAIL admin@local.inion
 ensure_kv "${NB}" SUPERUSER_PASSWORD "$(rand 20)"
 ensure_kv "${NB}" SUPERUSER_API_TOKEN "$(rand_hex 20)"
+ensure_kv "${NB}" API_TOKEN_PEPPER_1 "$(rand 64)"
 ensure_kv "${NB}" LOGIN_REQUIRED true
 ensure_kv "${NB}" GRAPHQL_ENABLED true
 ensure_kv "${NB}" METRICS_ENABLED false

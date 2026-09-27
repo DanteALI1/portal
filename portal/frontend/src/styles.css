@@ -2579,3 +2579,12 @@ kbd {
 .user-panel__groups { padding: 4px 12px 8px; margin: 0; }
 a.menu__item { text-decoration: none; color: inherit; }
 .audit-author { display: flex; align-items: center; gap: 6px; margin-top: 2px; }
+
+/* Шапка: поиск уступает место заголовку и меню пользователя */
+.topbar__title { flex: none; }
+.search-trigger { flex: 0 1 380px; width: auto; min-width: 0; }
+.search-trigger > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 1360px) {
+  .user-btn { padding-right: 3px; }
+  .user-btn__name { display: none; }
+}

@@ -94,6 +94,11 @@ REPO_ROOT="${REPO_ROOT}" bash "${SERVICES_ROOT}/scripts/gen-env.sh" "${SERVICES_
 step 7 "Nginx + SSL"
 # Nginx comes before the services: oauth2-proxy reads Keycloak's OIDC discovery through it.
 dnf install -y nginx
+# Package installed but its files deleted (e.g. /etc/nginx removed by hand): restore them
+if [[ ! -f /etc/nginx/nginx.conf || ! -f /etc/nginx/mime.types || ! -d /etc/nginx/conf.d ]]; then
+  # shellcheck disable=SC2046
+  dnf reinstall -y $(rpm -qa 'nginx*' --qf '%{NAME}\n')
+fi
 bash "${SERVICES_ROOT}/scripts/generate-ssl.sh" /etc/nginx/ssl "${DOMAIN}"
 mkdir -p "${NGINX_SNIPPETS}" /usr/share/nginx/rep
 install -m 644 "${REPO_ROOT}"/deploy/nginx/snippets/*.conf "${NGINX_SNIPPETS}/"
@@ -147,9 +152,9 @@ for _ in $(seq 1 60); do
   [[ "$(docker inspect -f '{{.State.Health.Status}}' netbox 2>/dev/null)" == healthy ]] && { echo "NetBox is up"; break; }
   sleep 5
 done
-docker exec -i netbox /opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py nbshell \
-  < "${SERVICES_ROOT}/netbox/sso-permissions.py" 2>/dev/null | grep '^\[netbox\]' || \
-  echo "[netbox] WARNING: could not apply SSO read-only permission" >&2
+docker exec -i netbox /opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py shell \
+  < "${SERVICES_ROOT}/netbox/post-install.py" 2>/dev/null | grep -o '\[netbox\].*' || \
+  echo "[netbox] WARNING: post-install.py failed (SSO permission / API token)" >&2
 
 step 11 "MediaWiki"
 bash "${SERVICES_ROOT}/scripts/install-wiki.sh"
@@ -183,16 +188,18 @@ check() { # description url expected_code [location-substring]
     FAILS=$((FAILS + 1))
   fi
 }
+# Nginx hands a missing session to oauth2-proxy internally: the client gets 302 straight to Keycloak
+KC_LOGIN="https://${DOMAIN}/auth/realms/inion/protocol/openid-connect/auth?"
 for _ in $(seq 1 24); do curl -fsS http://127.0.0.1:3000/api/health >/dev/null 2>&1 && break; sleep 5; done
 check "nginx /health"                           "https://${DOMAIN}/health" 200
 check "portal /api/health (no SSO)"             "https://${DOMAIN}/api/health" 200
-check "portal / -> login"                       "https://${DOMAIN}/" 302 "/oauth2/start"
+check "portal / -> Keycloak login"              "https://${DOMAIN}/" 302 "${KC_LOGIN}"
 check "portal /api/me without session -> 401"   "https://${DOMAIN}/api/me" 401
-check "netbox /netbox/ -> login"                "https://${DOMAIN}/netbox/" 302 "/oauth2/start"
+check "netbox /netbox/ -> Keycloak login"       "https://${DOMAIN}/netbox/" 302 "${KC_LOGIN}"
 check "netbox API without token -> 403"         "https://${DOMAIN}/netbox/api/dcim/sites/" 403
 check "netbox static"                           "https://${DOMAIN}/netbox/static/setmode.js" 200
-check "wiki /wiki/ -> login"                    "https://${DOMAIN}/wiki/" 302 "/oauth2/start"
-check "oauth2 start -> Keycloak"                "https://${DOMAIN}/oauth2/start?rd=%2F" 302 "/auth/realms/inion/protocol/openid-connect/auth"
+check "wiki /wiki/ -> Keycloak login"           "https://${DOMAIN}/wiki/" 302 "${KC_LOGIN}"
+check "oauth2 start -> Keycloak"                "https://${DOMAIN}/oauth2/start?rd=%2F" 302 "${KC_LOGIN}"
 check "keycloak realm discovery"                "https://${DOMAIN}/auth/realms/inion/.well-known/openid-configuration" 200
 check "http -> https"                           "http://${DOMAIN}/" 301 "https://${DOMAIN}/"
 
@@ -213,7 +220,7 @@ Configs:     ${SERVICES_ROOT}/
 DNS: ${DOMAIN} must resolve to this server on every client (SSO is bound to the name;
      requests by IP are redirected to https://${DOMAIN}/).
 SSL: self-signed by default — replace under /etc/nginx/ssl/ for production.
-Tests: sudo bash ${SERVICES_ROOT}/scripts/e2e.sh
+Tests: sudo bash deploy/scripts/e2e.sh   (from the repository checkout)
 ============================================================
 EOF
 exit $(( FAILS > 0 ? 1 : 0 ))

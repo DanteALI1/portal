@@ -72,3 +72,13 @@ a, a:visited { color: #7fb0ff; }
 #kc-locale ul { background: var(--rep-panel); border: 1px solid var(--rep-line); }
 #kc-locale-dropdown a, #kc-current-locale-link { color: var(--rep-muted) !important; }
 #kc-info, #kc-info-wrapper { background: transparent !important; color: var(--rep-muted); }
+/* "Show password" button next to the password field */
+.pf-c-input-group .pf-c-button, .pf-c-button.pf-m-control {
+  background: #0e1526 !important;
+  color: var(--rep-muted) !important;
+  border: 1px solid var(--rep-line) !important;
+  border-left: 0 !important;
+  border-radius: 0 10px 10px 0 !important;
+}
+.pf-c-input-group .pf-c-button::after, .pf-c-button.pf-m-control::after { border: 0 !important; }
+.pf-c-input-group .pf-c-form-control { border-radius: 10px 0 0 10px !important; }

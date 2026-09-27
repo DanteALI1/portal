@@ -53,8 +53,10 @@ def _jwt_claims(token: str) -> dict:
 
 
 def _split_groups(raw: str) -> list[str]:
-    # oauth2-proxy joins groups with ","; strip a leading "/" in case full paths are sent
-    return [g.strip().lstrip("/") for g in raw.split(",") if g.strip()]
+    # oauth2-proxy joins groups with ","; strip a leading "/" in case full paths are sent.
+    # Keycloak roles ("role:...") are not groups (the keycloak-oidc provider would add them).
+    groups = [g.strip().lstrip("/") for g in raw.split(",") if g.strip()]
+    return [g for g in groups if not g.startswith("role:")]
 
 
 def current_user(request: Request) -> User:

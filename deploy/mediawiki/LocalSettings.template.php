@@ -113,9 +113,10 @@ $wgAuthRemoteuserAllowUserSwitch = false;
 $wgAuthRemoteuserRemoveAuthPagesAndLinks = true;
 $wgEmailAuthentication = false;
 
-# Members of the wiki admin group get "sysop", everyone else loses it (synced per request)
-$wgHooks['BeforeInitialize'][] = static function ( $title, $unused, $output, $user, $request, $mediaWiki ) {
-	if ( !$user->isRegistered() || !isset( $_SERVER['HTTP_X_REMOTE_USER'] ) ) {
+# Members of the wiki admin group get "sysop", everyone else loses it.
+# Synced on every request of both entry points: index.php (BeforeInitialize) and api.php (ApiBeforeMain).
+function repSsoSyncSysop( $user ): void {
+	if ( !$user || !$user->isRegistered() || !isset( $_SERVER['HTTP_X_REMOTE_USER'] ) ) {
 		return;
 	}
 	$groups = array_map( 'trim', explode( ',', $_SERVER['HTTP_X_REMOTE_GROUPS'] ?? '' ) );
@@ -127,6 +128,12 @@ $wgHooks['BeforeInitialize'][] = static function ( $title, $unused, $output, $us
 	} elseif ( !$isAdmin && $has ) {
 		$ugm->removeUserFromGroup( $user, 'sysop' );
 	}
+}
+$wgHooks['BeforeInitialize'][] = static function ( $title, $unused, $output, $user, $request, $mediaWiki ) {
+	repSsoSyncSysop( $user );
+};
+$wgHooks['ApiBeforeMain'][] = static function ( &$main ) {
+	repSsoSyncSysop( $main->getUser() );
 };
 
 ## Rights: no anonymous access at all, accounts are created automatically on first SSO visit

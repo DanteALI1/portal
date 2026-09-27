@@ -28,10 +28,14 @@ services:
     env_file: .env
     command:
       - --http-address=0.0.0.0:4180
-      - --provider=keycloak-oidc
+      # Generic OIDC: groups only from the "groups" claim. keycloak-oidc would add Keycloak
+      # roles (role:offline_access, ...) to the groups, and NetBox would create groups from them.
+      - --provider=oidc
       - --oidc-issuer-url=https://${DOMAIN:-rep.local.inion}/auth/realms/inion
       - --client-id=rep-portal
       - --code-challenge-method=S256
+      # No "groups" scope in the realm: groups come from the client's group mapper
+      - --scope=openid email profile
       - --redirect-url=https://${DOMAIN:-rep.local.inion}/oauth2/callback
       - --reverse-proxy=true
       - --trusted-proxy-ip=127.0.0.1
