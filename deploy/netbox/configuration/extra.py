@@ -1,4 +1,14 @@
 from os import environ
 
-# Subdirectory deployment: https://rep.local.inion/netbox/
+# NetBox is served under https://rep.local.inion/netbox/
 BASE_PATH = environ.get("BASE_PATH", "netbox/")
+
+# --- Single sign-on (Keycloak -> oauth2-proxy -> Nginx auth_request) ---
+# REMOTE_AUTH_* come from .env (gen-env.sh): users are identified by X-Remote-User,
+# groups are synced from X-Remote-Groups on every login, members of
+# netbox-admins become superusers.
+#
+# NetBox cannot express "view everything" in REMOTE_AUTH_DEFAULT_PERMISSIONS (no
+# wildcards), so read-only access is an ObjectPermission (actions=['view'], all
+# object types) bound to the SSO groups — created by deploy/netbox/sso-permissions.py.
+REMOTE_AUTH_DEFAULT_PERMISSIONS = {}
