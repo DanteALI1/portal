@@ -1,0 +1,32 @@
+services:
+  portal:
+    build: .
+    image: rep-portal:1.0.0
+    container_name: portal
+    ports:
+      - "127.0.0.1:3000:3000"
+    environment:
+      PORTAL_DATA_DIR: /data
+      PORTAL_STATIC_DIR: /app/static
+      PORTAL_PROBE_BASE: https://host.docker.internal
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+      - "rep.local.inion:host-gateway"
+    volumes:
+      - portal-data:/data
+    restart: unless-stopped
+    networks:
+      - services-network
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+volumes:
+  portal-data:
+
+networks:
+  services-network:
+    external: true
