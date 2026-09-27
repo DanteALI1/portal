@@ -1,0 +1,21 @@
+{
+  "name": "rep-portal",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Веб-портал корпоративных систем rep.local.inion",
+  "type": "module",
+  "scripts": {
+    "dev": "node build.mjs --serve",
+    "build": "node build.mjs"
+  },
+  "dependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.27.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
