@@ -152,6 +152,12 @@ export default function Settings({ prefs, setPrefs, systemsCount, onExport, onIm
             <li>
               <kbd>/</kbd> поиск по каталогу
             </li>
+            <li>
+              <kbd>V</kbd> режим витрины
+            </li>
+            <li>
+              <kbd>?</kbd> все горячие клавиши
+            </li>
             {canEdit && (
               <li>
                 <kbd>N</kbd> добавить систему

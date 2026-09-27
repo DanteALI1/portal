@@ -96,12 +96,14 @@ export function CommandPalette({ open, onClose, systems, health, commands }) {
           <input
             id="palette-input"
             ref={inputRef}
+            role="combobox"
+            aria-expanded="true"
+            aria-controls="palette-list"
+            aria-activedescendant={items[active]?.id}
             value={q}
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={onKey}
             placeholder="Найти систему или действие…"
-            aria-controls="palette-list"
-            aria-activedescendant={items[active]?.id}
           />
           <kbd>Esc</kbd>
         </div>

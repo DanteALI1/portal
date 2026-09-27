@@ -1,84 +1,355 @@
-/* REP portal look for the Keycloak login page. System fonts only. */
+/* =====================================================================
+   REP portal — премиальная тема входа Keycloak («Aurora Glass»).
+   Только системные шрифты, без внешних CDN. Правит лишь оформление,
+   разметку базовой темы keycloak не меняет.
+   ===================================================================== */
 :root {
-  --rep-bg: #0b1020;
-  --rep-panel: #121a2e;
-  --rep-line: rgba(148, 163, 184, 0.18);
-  --rep-text: #e6ebf5;
+  --rep-bg: #070b16;
+  --rep-bg-2: #0a1122;
+  --rep-panel: rgba(17, 25, 44, 0.72);
+  --rep-line: rgba(148, 163, 184, 0.16);
+  --rep-line-strong: rgba(148, 163, 184, 0.3);
+  --rep-text: #eaf0fb;
   --rep-muted: #93a4c3;
   --rep-a: #4c8dff;
   --rep-b: #14c8b4;
+  --rep-field: rgba(9, 14, 26, 0.66);
 }
-html, body, .login-pf body {
-  background: radial-gradient(1200px 600px at 10% -10%, rgba(76, 141, 255, 0.22), transparent 60%),
-    radial-gradient(900px 500px at 110% 110%, rgba(20, 200, 180, 0.18), transparent 60%), var(--rep-bg) !important;
+
+/* ------- фон: аврора + сетка + виньетка ------------------------------ */
+html,
+body,
+.login-pf body,
+body.login-pf {
+  min-height: 100%;
+  background: var(--rep-bg) !important;
   color: var(--rep-text);
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", "Liberation Sans", Arial, sans-serif !important;
+  -webkit-font-smoothing: antialiased;
 }
-.login-pf-page { padding-top: 6vh; }
+body::before,
+body::after {
+  content: "";
+  position: fixed;
+  inset: -20% -10% auto -10%;
+  height: 90vh;
+  z-index: 0;
+  pointer-events: none;
+}
+/* тёплое сияние сверху-слева и снизу-справа, медленно дрейфует */
+body::before {
+  inset: 0;
+  height: 100%;
+  background:
+    radial-gradient(58vw 46vw at 12% -8%, rgba(76, 141, 255, 0.28), transparent 62%),
+    radial-gradient(52vw 42vw at 108% 112%, rgba(20, 200, 180, 0.24), transparent 60%),
+    radial-gradient(40vw 40vw at 88% -12%, rgba(123, 97, 255, 0.16), transparent 60%),
+    linear-gradient(180deg, var(--rep-bg-2), var(--rep-bg));
+  animation: rep-aurora 26s ease-in-out infinite alternate;
+}
+/* тонкая точечная сетка + виньетка поверх */
+body::after {
+  inset: 0;
+  height: 100%;
+  background:
+    radial-gradient(rgba(148, 163, 184, 0.08) 1px, transparent 1.4px) 0 0 / 26px 26px,
+    radial-gradient(120vw 90vh at 50% 40%, transparent 55%, rgba(3, 6, 14, 0.7) 100%);
+  mask-image: radial-gradient(90vw 90vh at 50% 30%, #000 60%, transparent 100%);
+  opacity: 0.7;
+}
+@keyframes rep-aurora {
+  0% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(-2.5%, 2%, 0) scale(1.06); }
+  100% { transform: translate3d(2%, -1.5%, 0) scale(1.03); }
+}
+
+.login-pf-page {
+  position: relative;
+  z-index: 1;
+  padding-top: 7vh;
+}
+#kc-header,
+#kc-content,
+.login-pf-page .login-pf-header { position: relative; z-index: 1; }
+
+/* ------- бренд (лого + название) ------------------------------------ */
 #kc-header-wrapper {
   color: var(--rep-text);
-  font-size: 1.6rem;
-  font-weight: 700;
-  letter-spacing: 0;
+  font-size: 1.7rem;
+  font-weight: 800;
+  letter-spacing: 0.2px;
   text-transform: none;
-  padding: 1rem 0 1.5rem;
+  padding: 0.5rem 0 1.6rem;
+  overflow: visible;
 }
-.rep-brand { display: inline-flex; align-items: center; gap: 0.75rem; }
+.rep-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.72rem;
+  background: linear-gradient(92deg, #ffffff 12%, #bcd4ff 55%, #8ff0e4 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
 .rep-brand::before {
   content: "";
-  width: 40px;
-  height: 40px;
+  width: 46px;
+  height: 46px;
+  flex: none;
   background: url("../img/logo.svg") center / contain no-repeat;
+  filter: drop-shadow(0 6px 18px rgba(76, 141, 255, 0.55));
+  animation: rep-float 6s ease-in-out infinite;
 }
+@keyframes rep-float {
+  50% { transform: translateY(-3px); }
+}
+
+/* ------- стеклянная карточка ---------------------------------------- */
 .card-pf {
+  position: relative;
   background: var(--rep-panel) !important;
   border: 1px solid var(--rep-line) !important;
   border-top: 0 !important;
-  border-radius: 16px !important;
-  box-shadow: 0 24px 60px rgba(2, 8, 23, 0.55) !important;
+  border-radius: 20px !important;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.05) inset,
+    0 30px 70px -20px rgba(2, 6, 20, 0.75),
+    0 0 0 1px rgba(76, 141, 255, 0.05),
+    0 0 60px -12px rgba(76, 141, 255, 0.28) !important;
   color: var(--rep-text);
-  max-width: 440px !important;
+  max-width: 460px !important;
+  padding: 2.2rem 2.1rem 2.3rem !important;
+  -webkit-backdrop-filter: blur(22px) saturate(140%);
+  backdrop-filter: blur(22px) saturate(140%);
+  animation: rep-rise 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
 }
+/* верхняя градиентная кромка с мягким свечением */
 .card-pf::before {
   content: "";
   display: block;
-  height: 4px;
-  margin: -1px -1px 0;
-  border-radius: 16px 16px 0 0;
-  background: linear-gradient(90deg, var(--rep-a), var(--rep-b));
+  height: 3px;
+  margin: -2.2rem -2.1rem 1.6rem;
+  border-radius: 20px 20px 0 0;
+  background: linear-gradient(90deg, var(--rep-a), var(--rep-b), var(--rep-a));
+  background-size: 200% 100%;
+  box-shadow: 0 6px 22px -6px rgba(20, 200, 180, 0.6);
+  animation: rep-sheen 6s linear infinite;
 }
-#kc-page-title { color: var(--rep-text); font-size: 1.25rem; font-weight: 600; }
+@keyframes rep-rise {
+  from { opacity: 0; transform: translateY(14px); }
+}
+@keyframes rep-sheen {
+  to { background-position: 200% 0; }
+}
+
+/* ------- заголовок + подзаголовок ----------------------------------- */
+#kc-page-title {
+  color: var(--rep-text);
+  font-size: 1.32rem;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  text-align: center;
+  margin-bottom: 0.15rem;
+}
+#kc-page-title::after {
+  content: "Единый вход в корпоративные системы";
+  display: block;
+  margin-top: 0.4rem;
+  font-size: 0.86rem;
+  font-weight: 400;
+  color: var(--rep-muted);
+}
 .login-pf-page .login-pf-header h1 { color: var(--rep-text); }
-label, .pf-c-form__label, .pf-c-form__label-text, #kc-form-options, .kc-login-tooltip { color: var(--rep-muted) !important; }
-.pf-c-form-control, input[type="text"], input[type="password"], input[type="email"] {
-  background: #0e1526 !important;
-  color: var(--rep-text) !important;
-  border: 1px solid var(--rep-line) !important;
-  border-radius: 10px !important;
+
+/* ------- поля ------------------------------------------------------- */
+label,
+.pf-c-form__label,
+.pf-c-form__label-text,
+#kc-form-options,
+.kc-login-tooltip {
+  color: var(--rep-muted) !important;
 }
-.pf-c-form-control:focus { border-color: var(--rep-a) !important; outline: none; box-shadow: 0 0 0 3px rgba(76, 141, 255, 0.25); }
-.pf-c-button.pf-m-primary, #kc-login {
+.pf-c-form__label,
+.control-label {
+  font-size: 0.78rem !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  margin-bottom: 0.4rem !important;
+}
+.form-group { margin-bottom: 1.15rem; }
+.pf-c-form-control,
+input[type="text"],
+input[type="password"],
+input[type="email"] {
+  height: 48px !important;
+  padding: 0 0.95rem !important;
+  background: var(--rep-field) !important;
+  color: var(--rep-text) !important;
+  border: 1px solid var(--rep-line-strong) !important;
+  border-radius: 12px !important;
+  font-size: 0.98rem !important;
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+}
+.pf-c-form-control::placeholder,
+input::placeholder { color: rgba(147, 164, 195, 0.6) !important; }
+.pf-c-form-control:hover,
+input[type="text"]:hover,
+input[type="password"]:hover,
+input[type="email"]:hover { border-color: rgba(148, 163, 184, 0.45) !important; }
+.pf-c-form-control:focus,
+input[type="text"]:focus,
+input[type="password"]:focus,
+input[type="email"]:focus {
+  border-color: var(--rep-a) !important;
+  outline: none;
+  background: rgba(11, 17, 32, 0.85) !important;
+  box-shadow: 0 0 0 3px rgba(76, 141, 255, 0.22), 0 8px 24px -12px rgba(76, 141, 255, 0.5);
+}
+/* автозаполнение Chrome не должно ломать тёмную тему полей */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--rep-text) !important;
+  caret-color: var(--rep-text);
+  -webkit-box-shadow: 0 0 0 1000px #0b1022 inset !important;
+  border: 1px solid var(--rep-line-strong) !important;
+  transition: background-color 9999s ease-in-out 0s;
+}
+
+/* группа «поле + показать пароль» */
+.pf-c-input-group { border-radius: 12px; }
+.pf-c-input-group .pf-c-form-control { border-radius: 12px 0 0 12px !important; }
+.pf-c-input-group .pf-c-button,
+.pf-c-button.pf-m-control {
+  background: var(--rep-field) !important;
+  color: var(--rep-muted) !important;
+  border: 1px solid var(--rep-line-strong) !important;
+  border-left: 0 !important;
+  border-radius: 0 12px 12px 0 !important;
+  transition: color 0.16s ease, background 0.16s ease;
+}
+.pf-c-input-group .pf-c-button:hover,
+.pf-c-button.pf-m-control:hover { color: var(--rep-text) !important; background: rgba(11, 17, 32, 0.85) !important; }
+.pf-c-input-group .pf-c-button::after,
+.pf-c-button.pf-m-control::after { border: 0 !important; }
+
+/* ------- кнопка входа ----------------------------------------------- */
+.pf-c-button.pf-m-primary,
+#kc-login,
+input[type="submit"] {
+  position: relative;
+  overflow: hidden;
+  width: 100%;
+  height: 50px;
+  margin-top: 0.3rem;
   background: linear-gradient(135deg, var(--rep-a), var(--rep-b)) !important;
   border: 0 !important;
-  border-radius: 10px !important;
+  border-radius: 12px !important;
   color: #fff !important;
-  font-weight: 600;
-  padding: 0.7rem 1rem;
+  font-weight: 700;
+  font-size: 1rem;
+  letter-spacing: 0.2px;
+  box-shadow: 0 12px 28px -10px rgba(20, 200, 180, 0.55), 0 2px 0 rgba(255, 255, 255, 0.12) inset;
+  transition: transform 0.14s ease, box-shadow 0.16s ease, filter 0.16s ease;
 }
-.pf-c-button.pf-m-primary:hover, #kc-login:hover { filter: brightness(1.08); }
-a, a:visited { color: #7fb0ff; }
-.alert-error, .pf-c-alert.pf-m-danger { background: rgba(242, 85, 122, 0.12) !important; border-color: rgba(242, 85, 122, 0.4) !important; color: #ffd1dc !important; }
-.alert-warning, .pf-c-alert.pf-m-warning { background: rgba(242, 179, 61, 0.12) !important; color: #ffe5b0 !important; }
-#kc-locale ul { background: var(--rep-panel); border: 1px solid var(--rep-line); }
-#kc-locale-dropdown a, #kc-current-locale-link { color: var(--rep-muted) !important; }
-#kc-info, #kc-info-wrapper { background: transparent !important; color: var(--rep-muted); }
-/* "Show password" button next to the password field */
-.pf-c-input-group .pf-c-button, .pf-c-button.pf-m-control {
-  background: #0e1526 !important;
-  color: var(--rep-muted) !important;
-  border: 1px solid var(--rep-line) !important;
-  border-left: 0 !important;
-  border-radius: 0 10px 10px 0 !important;
+/* блик, пробегающий по кнопке при наведении */
+.pf-c-button.pf-m-primary::after,
+#kc-login::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(105deg, transparent 30%, rgba(255, 255, 255, 0.35) 50%, transparent 70%);
+  transform: translateX(-120%);
+  transition: transform 0.6s ease;
 }
-.pf-c-input-group .pf-c-button::after, .pf-c-button.pf-m-control::after { border: 0 !important; }
-.pf-c-input-group .pf-c-form-control { border-radius: 10px 0 0 10px !important; }
+.pf-c-button.pf-m-primary:hover,
+#kc-login:hover,
+input[type="submit"]:hover {
+  filter: brightness(1.06);
+  transform: translateY(-1px);
+  box-shadow: 0 18px 36px -12px rgba(20, 200, 180, 0.65), 0 2px 0 rgba(255, 255, 255, 0.14) inset;
+}
+.pf-c-button.pf-m-primary:hover::after,
+#kc-login:hover::after { transform: translateX(120%); }
+.pf-c-button.pf-m-primary:active,
+#kc-login:active { transform: translateY(0); }
+
+/* ------- ссылки, локаль, инфо --------------------------------------- */
+a,
+a:visited { color: #8fb6ff; text-decoration: none; transition: color 0.15s ease; }
+a:hover { color: #bcd4ff; }
+
+#kc-locale { position: relative; z-index: 3; }
+#kc-locale ul {
+  background: #101a2e;
+  border: 1px solid var(--rep-line-strong);
+  border-radius: 10px;
+  box-shadow: 0 20px 40px -16px rgba(2, 6, 20, 0.7);
+  overflow: hidden;
+}
+#kc-locale ul li a:hover { background: rgba(76, 141, 255, 0.14); }
+#kc-locale-dropdown a,
+#kc-current-locale-link { color: var(--rep-muted) !important; }
+#kc-current-locale-link::after { color: var(--rep-muted); }
+
+#kc-info,
+#kc-info-wrapper { background: transparent !important; color: var(--rep-muted); }
+
+/* тонкий футер с доменом */
+.login-pf-page::after {
+  content: "rep.local.inion · единая точка входа";
+  display: block;
+  margin: 1.6rem auto 0;
+  text-align: center;
+  font-size: 0.76rem;
+  letter-spacing: 0.04em;
+  color: rgba(147, 164, 195, 0.55);
+}
+
+/* ------- уведомления ------------------------------------------------ */
+.alert,
+.pf-c-alert {
+  border-radius: 12px !important;
+  backdrop-filter: blur(8px);
+}
+.alert-error,
+.pf-c-alert.pf-m-danger {
+  background: rgba(242, 85, 122, 0.14) !important;
+  border: 1px solid rgba(242, 85, 122, 0.4) !important;
+  color: #ffd1dc !important;
+}
+.alert-warning,
+.pf-c-alert.pf-m-warning {
+  background: rgba(242, 179, 61, 0.14) !important;
+  border: 1px solid rgba(242, 179, 61, 0.4) !important;
+  color: #ffe5b0 !important;
+}
+.alert-success,
+.pf-c-alert.pf-m-success {
+  background: rgba(20, 200, 180, 0.14) !important;
+  border: 1px solid rgba(20, 200, 180, 0.4) !important;
+  color: #b9f5ec !important;
+}
+
+/* «Запомнить меня» и опции */
+#kc-form-options .checkbox { color: var(--rep-muted); }
+input[type="checkbox"] { accent-color: var(--rep-a); }
+
+/* ------- адаптив ---------------------------------------------------- */
+@media (max-width: 520px) {
+  .login-pf-page { padding-top: 4vh; }
+  .card-pf { padding: 1.7rem 1.3rem 1.9rem !important; border-radius: 18px !important; }
+  .card-pf::before { margin: -1.7rem -1.3rem 1.4rem; }
+  #kc-header-wrapper { font-size: 1.45rem; }
+}
+
+/* ------- уважение к «без анимаций» ---------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  body::before,
+  .rep-brand::before,
+  .card-pf,
+  .card-pf::before { animation: none !important; }
+  .pf-c-button.pf-m-primary::after,
+  #kc-login::after { display: none; }
+}

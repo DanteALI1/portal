@@ -3,12 +3,13 @@ import { HealthBars, Menu, StatusBadge, SystemGlyph } from './ui.jsx';
 import { stateOf, uptime } from '../lib/health.js';
 import { formatMs } from '../lib/format.js';
 
-export function systemActions(sys, { canEdit, onEdit, onDelete, onTogglePin, onCopy, onCheck }) {
+export function systemActions(sys, { canEdit, onDetails, onEdit, onDelete, onTogglePin, onCopy, onCheck }) {
   const view = [
+    onDetails && { icon: 'activity', label: 'Подробности', onClick: () => onDetails(sys) },
     { icon: 'external', label: 'Открыть в новой вкладке', onClick: () => window.open(sys.url, '_blank', 'noopener') },
     { icon: 'copy', label: 'Копировать ссылку', onClick: () => onCopy(sys) },
     { icon: 'refresh', label: 'Проверить доступность', onClick: () => onCheck(sys) },
-  ];
+  ].filter(Boolean);
   // Изменять каталог могут только администраторы портала (сервер проверяет это ещё раз)
   if (!canEdit) return view;
   return [
