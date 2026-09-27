@@ -11,6 +11,11 @@ $wgMetaNamespace = "Project";
 
 ## Protocol / path behind Nginx reverse proxy
 $wgServer = "https://rep.local.inion";
+# Also serve correct links when opened by server IP (e.g. https://192.168.1.48/wiki/)
+if ( isset( $_SERVER['HTTP_HOST'] )
+	&& preg_match( '/^(rep\.local\.inion|\d{1,3}(\.\d{1,3}){3})$/', $_SERVER['HTTP_HOST'] ) ) {
+	$wgServer = "https://" . $_SERVER['HTTP_HOST'];
+}
 $wgCanonicalServer = "https://rep.local.inion";
 $wgScriptPath = "/wiki";
 $wgResourceBasePath = $wgScriptPath;

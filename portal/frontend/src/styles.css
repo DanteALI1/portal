@@ -263,11 +263,13 @@ a {
 }
 
 .ghost-btn {
-  border: 0;
+  border: 1px solid var(--line);
   background: transparent;
   color: var(--muted);
   cursor: pointer;
-  padding: 0.25rem 0.4rem;
+  font: inherit;
+  font-size: 0.8rem;
+  padding: 0.25rem 0.55rem;
   border-radius: 0.4rem;
 }
 
@@ -393,4 +395,10 @@ a {
   .system {
     min-height: 160px;
   }
+}
+
+.modal-text {
+  margin: 0 0 1rem;
+  color: var(--muted);
+  line-height: 1.5;
 }

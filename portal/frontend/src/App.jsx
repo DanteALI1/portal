@@ -127,11 +127,53 @@ function AddModal({ onClose, onCreate }) {
   );
 }
 
+const BUILTIN_IDS = ["portal", "netbox", "wiki"];
+
+function ConfirmDeleteModal({ system, onCancel, onConfirm }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function confirmDelete() {
+    setBusy(true);
+    setError("");
+    try {
+      await onConfirm(system.id);
+    } catch (err) {
+      setError(err.message || "Не удалось удалить");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" onClick={onCancel}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <h3>Удалить «{system.name}»?</h3>
+        {error ? <div className="error">{error}</div> : null}
+        <p className="modal-text">
+          Карточка будет убрана с портала. Сам сервис ({system.url}) продолжит работать.
+          {system.builtin
+            ? " Встроенную систему можно вернуть кнопкой «Восстановить стандартные»."
+            : ""}
+        </p>
+        <div className="form-actions">
+          <button type="button" className="btn" onClick={onCancel} disabled={busy}>
+            Отмена
+          </button>
+          <button type="button" className="btn btn-danger" onClick={confirmDelete} disabled={busy}>
+            {busy ? "Удаление…" : "Удалить"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const [systems, setSystems] = useState([]);
   const [statuses, setStatuses] = useState({});
   const [error, setError] = useState("");
   const [showAdd, setShowAdd] = useState(false);
+  const [toDelete, setToDelete] = useState(null);
   const [loading, setLoading] = useState(true);
 
   async function loadSystems() {
@@ -179,16 +221,28 @@ export default function App() {
     await loadSystems();
   }
 
-  async function removeSystem(id, e) {
+  function askDelete(item, e) {
     e.stopPropagation();
-    if (!confirm("Удалить систему из портала?")) return;
+    setToDelete(item);
+  }
+
+  async function deleteSystem(id) {
+    await api(`/api/systems/${id}`, { method: "DELETE" });
+    setToDelete(null);
+    await loadSystems();
+  }
+
+  async function restoreDefaults() {
     try {
-      await api(`/api/systems/${id}`, { method: "DELETE" });
+      await api("/api/systems/restore-defaults", { method: "POST" });
       await loadSystems();
     } catch (err) {
-      setError(err.message || "Не удалось удалить");
+      setError(err.message || "Не удалось восстановить");
     }
   }
+
+  const missingBuiltins =
+    !loading && BUILTIN_IDS.some((id) => !systems.some((s) => s.id === id));
 
   function openSystem(url) {
     if (!url) return;
@@ -220,6 +274,11 @@ export default function App() {
           <button className="btn" onClick={() => refreshStatuses()} type="button">
             Обновить статусы
           </button>
+          {missingBuiltins ? (
+            <button className="btn" onClick={restoreDefaults} type="button">
+              Восстановить стандартные
+            </button>
+          ) : null}
           <button className="btn btn-primary" onClick={() => setShowAdd(true)} type="button">
             Добавить
           </button>
@@ -246,16 +305,16 @@ export default function App() {
             >
               <div className="system-top">
                 <div className="icon">{ICONS[item.icon] || ICONS.link}</div>
-                {!item.builtin ? (
-                  <button
-                    className="ghost-btn"
-                    type="button"
-                    title="Удалить"
-                    onClick={(e) => removeSystem(item.id, e)}
-                  >
-                    ✕
-                  </button>
-                ) : null}
+                <button
+                  className="ghost-btn"
+                  type="button"
+                  title={`Удалить «${item.name}»`}
+                  aria-label={`Удалить ${item.name}`}
+                  onClick={(e) => askDelete(item, e)}
+                  onKeyDown={(e) => e.stopPropagation()}
+                >
+                  ✕ Удалить
+                </button>
               </div>
               <div>
                 <h3>{item.name}</h3>
@@ -273,6 +332,14 @@ export default function App() {
       <footer className="footer">
         Red OS 8 · Nginx · Docker · NetBox · MediaWiki
       </footer>
+
+      {toDelete ? (
+        <ConfirmDeleteModal
+          system={toDelete}
+          onCancel={() => setToDelete(null)}
+          onConfirm={deleteSystem}
+        />
+      ) : null}
 
       {showAdd ? (
         <AddModal onClose={() => setShowAdd(false)} onCreate={createSystem} />

@@ -77,6 +77,8 @@ else
   sed -i 's|^\$wgScriptPath .*|$wgScriptPath = "/wiki";|' LocalSettings.php
 fi
 
+# Readable by www-data (uid/gid 33) inside the container, not world-readable
+chown root:33 LocalSettings.php
 chmod 640 LocalSettings.php
 
 echo "[wiki] phase 3: recreate with LocalSettings mounted"

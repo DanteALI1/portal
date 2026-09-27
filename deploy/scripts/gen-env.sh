@@ -17,6 +17,10 @@ if [[ ! -f "${ROOT}/netbox/.env" ]]; then
   SECRET_KEY="$(rand 64)"
   ADMIN_PASS="$(rand 20)"
   API_TOKEN="$(rand_hex 20)"
+  # Allow access by server IPs too (https://<ip>/netbox/)
+  HOST_IPS="$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -v ':' | xargs || true)"
+  CSRF_ORIGINS="https://rep.local.inion"
+  for ip in ${HOST_IPS}; do CSRF_ORIGINS="${CSRF_ORIGINS} https://${ip}"; done
 
   cat > "${ROOT}/netbox/.env" <<EOF
 VERSION=v4.7-5.1.1
@@ -41,7 +45,8 @@ REDIS_CACHE_PASSWORD=${REDIS_CACHE_PASSWORD}
 REDIS_CACHE_SSL=false
 REDIS_CACHE_INSECURE_SKIP_TLS_VERIFY=false
 SECRET_KEY=${SECRET_KEY}
-ALLOWED_HOSTS=rep.local.inion localhost 127.0.0.1
+ALLOWED_HOSTS="rep.local.inion localhost 127.0.0.1 ${HOST_IPS}"
+CSRF_TRUSTED_ORIGINS="${CSRF_ORIGINS}"
 BASE_PATH=netbox/
 CORS_ORIGIN_ALLOW_ALL=True
 SKIP_SUPERUSER=false
@@ -78,7 +83,7 @@ MARIADB_USER=wiki
 MARIADB_PASSWORD=${WIKI_DB_PASS}
 WIKI_ADMIN_USER=WikiAdmin
 WIKI_ADMIN_PASSWORD=${WIKI_ADMIN_PASS}
-WIKI_SITENAME=Корпоративная Вики
+WIKI_SITENAME="Корпоративная Вики"
 EOF
   chmod 600 "${ROOT}/mediawiki/.env"
   echo "[env] wiki admin password: ${WIKI_ADMIN_PASS}"
