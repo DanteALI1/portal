@@ -130,7 +130,7 @@ export default function SystemModal({ open, initial, systems, serverErrors = {},
               onChange={(e) => set('name', e.target.value)}
               onBlur={() => blur('name')}
               placeholder="Например, Grafana"
-              maxLength={80}
+              maxLength={60}
             />
             {show('name') && <span className="field__error">{errors.name}</span>}
           </label>
@@ -147,6 +147,7 @@ export default function SystemModal({ open, initial, systems, serverErrors = {},
               onBlur={() => blur('url')}
               placeholder="/grafana/"
               spellCheck={false}
+              maxLength={500}
             />
             {show('url') ? (
               <span className="field__error">{errors.url}</span>
@@ -165,7 +166,7 @@ export default function SystemModal({ open, initial, systems, serverErrors = {},
 
           <label className={`field field--wide ${show('description') ? 'field--error' : ''}`}>
             <span className="field__label">
-              Описание <span className="field__count">{form.description.length}/240</span>
+              Описание <span className="field__count" style={form.description.length > 240 ? { color: 'var(--bad)' } : undefined}>{form.description.length}/240</span>
             </span>
             <textarea
               id="sys-desc"

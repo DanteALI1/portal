@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Sidebar, Topbar, NAV } from './components/Shell.jsx';
 import SystemModal from './components/SystemModal.jsx';
+import SystemDrawer from './components/SystemDrawer.jsx';
+import ShortcutsModal from './components/ShortcutsModal.jsx';
+import Kiosk from './components/Kiosk.jsx';
 import { CommandPalette, ConfirmDialog, Toasts } from './components/Overlays.jsx';
 import { healthState } from './components/SystemCard.jsx';
 import Overview from './pages/Overview.jsx';
@@ -51,6 +54,9 @@ export default function App() {
   const [modal, setModal] = useState({ open: false, initial: null, errors: {} });
   const [confirm, setConfirm] = useState(null);
   const [palette, setPalette] = useState(false);
+  const [detail, setDetail] = useState(null); // система в дровере подробностей
+  const [shortcuts, setShortcuts] = useState(false); // оверлей горячих клавиш
+  const [kiosk, setKiosk] = useState(false); // режим витрины (NOC-стена)
   const [mobileNav, setMobileNav] = useState(false);
   const [now, setNow] = useState(Date.now());
 
@@ -196,10 +202,17 @@ export default function App() {
   useEffect(() => {
     const onKey = (e) => {
       const typing = /INPUT|TEXTAREA|SELECT/.test(document.activeElement?.tagName) || document.activeElement?.isContentEditable;
+      const plain = !typing && !e.ctrlKey && !e.metaKey && !e.altKey;
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
         setPalette((p) => !p);
-      } else if (isAdmin && !typing && !e.ctrlKey && !e.metaKey && !e.altKey && (e.key === 'n' || e.key === 'т') && !modal.open && !palette) {
+      } else if (plain && e.key === '?') {
+        e.preventDefault();
+        setShortcuts((s) => !s);
+      } else if (plain && (e.key === 'v' || e.key === 'м') && !modal.open && !palette) {
+        e.preventDefault();
+        setKiosk((k) => !k);
+      } else if (isAdmin && plain && (e.key === 'n' || e.key === 'т') && !modal.open && !palette) {
         e.preventDefault();
         openAdd();
       }
@@ -268,6 +281,7 @@ export default function App() {
 
   const actions = {
     canEdit: isAdmin,
+    onDetails: (sys) => setDetail(sys.id),
     onEdit: (sys) => setModal({ open: true, initial: sys, errors: {} }),
     onDelete: (sys) =>
       setConfirm({
@@ -343,6 +357,8 @@ export default function App() {
     isAdmin && { icon: 'audit', label: 'Перейти: Журнал действий', keywords: 'аудит история', run: () => navigate('audit') },
     { icon: 'sliders', label: 'Перейти: Настройки', keywords: 'параметры', run: () => navigate('settings') },
     { icon: 'refresh', label: 'Проверить доступность всех систем', keywords: 'health', run: checkAll },
+    { icon: 'monitor', label: 'Режим витрины (NOC-стена)', keywords: 'kiosk дашборд экран стена tv', hint: 'V', run: () => setKiosk(true) },
+    { icon: 'command', label: 'Горячие клавиши', keywords: 'shortcuts помощь клавиатура', hint: '?', run: () => setShortcuts(true) },
     {
       icon: prefs.theme === 'dark' ? 'sun' : 'moon',
       label: prefs.theme === 'dark' ? 'Включить светлую тему' : 'Включить тёмную тему',
@@ -450,6 +466,15 @@ export default function App() {
         }}
       />
       <CommandPalette open={palette} onClose={() => setPalette(false)} systems={systems} health={health} commands={commands} />
+      <SystemDrawer
+        system={systems.find((s) => s.id === detail) || null}
+        health={detail ? health[detail] : undefined}
+        actions={actions}
+        now={now}
+        onClose={() => setDetail(null)}
+      />
+      <ShortcutsModal open={shortcuts} onClose={() => setShortcuts(false)} canEdit={isAdmin} />
+      <Kiosk open={kiosk} systems={systems} health={health} gateway={gateway} onExit={() => setKiosk(false)} onRefresh={checkAll} />
       <Toasts toasts={toasts} onDismiss={dismiss} />
     </div>
   );

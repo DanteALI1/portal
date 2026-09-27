@@ -19,12 +19,16 @@ NetBox и Вики без повторного ввода пароля; выхо
 
 - **[Инструкция по развёртыванию](docs/DEPLOY.md)** — установка, пароли, проверка, управление, устранение неполадок
 - **[Единый вход (SSO)](docs/SSO.md)** — схема, группы, LDAP/AD и Kerberos, новые системы, аварийный вход, типовые ошибки
+- **[Параметры — что и где менять](docs/PARAMETERS.md)** — единый справочник по всем настройкам развёртывания
 - [Выгрузка изменений в GitHub через Cursor](docs/CURSOR-PUSH.md)
 - [Задача на SSO и новый интерфейс](docs/CLAUDE-TASK-SSO.md), [исходное ТЗ](docs/TZ-PORTAL-RED-OS8.md)
 
 ## Быстрый старт на сервере
 
 ```bash
+# Пустой сервер — одна команда (git + клон + полная установка):
+#   curl -fsSL https://raw.githubusercontent.com/DanteALI1/portal/main/deploy/scripts/bootstrap.sh | sudo DOMAIN=rep.local.inion bash
+# Или вручную:
 git clone https://github.com/DanteALI1/portal.git && cd portal
 sudo bash deploy/scripts/install.sh
 sudo cat /opt/services/credentials-*.txt
