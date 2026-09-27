@@ -1,0 +1,82 @@
+# oauth2-proxy: OIDC client of Keycloak, checks the SSO session for Nginx auth_request.
+# Secrets (OAUTH2_PROXY_CLIENT_SECRET, OAUTH2_PROXY_COOKIE_SECRET, OAUTH2_PROXY_REDIS_PASSWORD)
+# are read by oauth2-proxy from .env (gen-env.sh). Requires external network: services-network.
+
+services:
+  sso-redis:
+    image: docker.io/redis:7.4.9-alpine
+    container_name: sso-redis
+    command: ["sh", "-c", "redis-server --save 60 1 --appendonly no --requirepass \"$$OAUTH2_PROXY_REDIS_PASSWORD\""]
+    env_file: .env
+    volumes:
+      - sso-redis-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$OAUTH2_PROXY_REDIS_PASSWORD\" --no-auth-warning ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+    networks:
+      - services-network
+
+  oauth2-proxy:
+    image: quay.io/oauth2-proxy/oauth2-proxy:v7.15.4
+    container_name: oauth2-proxy
+    depends_on:
+      sso-redis:
+        condition: service_healthy
+    env_file: .env
+    command:
+      - --http-address=0.0.0.0:4180
+      - --provider=keycloak-oidc
+      - --oidc-issuer-url=https://${DOMAIN:-rep.local.inion}/auth/realms/inion
+      - --client-id=rep-portal
+      - --code-challenge-method=S256
+      - --redirect-url=https://${DOMAIN:-rep.local.inion}/oauth2/callback
+      - --reverse-proxy=true
+      - --trusted-proxy-ip=127.0.0.1
+      - --trusted-proxy-ip=172.16.0.0/12
+      - --set-xauthrequest=true
+      - --pass-access-token=true
+      - --skip-provider-button=true
+      - --email-domain=*
+      - --insecure-oidc-allow-unverified-email=true
+      - --oidc-groups-claim=groups
+      - --allowed-group=${SSO_GROUP_USERS:-portal-users}
+      - --allowed-group=${SSO_GROUP_PORTAL_ADMINS:-portal-admins}
+      - --allowed-group=${SSO_GROUP_NETBOX_ADMINS:-netbox-admins}
+      - --allowed-group=${SSO_GROUP_WIKI_ADMINS:-wiki-admins}
+      - --cookie-name=_rep_sso
+      - --cookie-secure=true
+      - --cookie-samesite=lax
+      - --cookie-expire=10h
+      - --cookie-refresh=5m
+      - --whitelist-domain=${DOMAIN:-rep.local.inion}
+      # Ends the Keycloak session on /oauth2/sign_out (single logout)
+      - --backend-logout-url=https://${DOMAIN:-rep.local.inion}/auth/realms/inion/protocol/openid-connect/logout?id_token_hint={id_token}
+      # Sessions in Redis: tokens with groups do not fit into cookies
+      - --session-store-type=redis
+      - --redis-connection-url=redis://sso-redis:6379
+      # Self-signed certificate of the host Nginx is trusted explicitly (TLS verification stays on)
+      - --provider-ca-file=/etc/oauth2-proxy/ca.crt
+      - --custom-templates-dir=/templates
+      - --upstream=static://202
+      - --silence-ping-logging=true
+    extra_hosts:
+      - "${DOMAIN:-rep.local.inion}:host-gateway"
+    volumes:
+      - /etc/nginx/ssl/${DOMAIN:-rep.local.inion}.crt:/etc/oauth2-proxy/ca.crt:ro
+      - ./templates:/templates:ro
+    ports:
+      - "127.0.0.1:4180:4180"
+    # The image is distroless (no shell): health is checked by the portal via /ping
+    restart: unless-stopped
+    networks:
+      - services-network
+
+volumes:
+  sso-redis-data:
+
+networks:
+  services-network:
+    external: true
