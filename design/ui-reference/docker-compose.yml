@@ -1,0 +1,17 @@
+# /opt/services/portal/docker-compose.yml
+services:
+  portal:
+    build: .
+    container_name: portal
+    ports:
+      - "127.0.0.1:3000:3000"
+    # Правка настроек без пересборки образа:
+    volumes:
+      - ./dist/config.js:/usr/share/nginx/html/config.js:ro
+    restart: unless-stopped
+    networks:
+      - services-network
+
+networks:
+  services-network:
+    external: true
