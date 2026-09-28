@@ -33,7 +33,7 @@ deploy/sso.env.example ──┐
 | `SSO_GROUP_NETBOX_ADMINS` | `sso.env` | `netbox-admins` | Суперпользователи NetBox (остальные — только чтение). |
 | `SSO_GROUP_WIKI_ADMINS` | `sso.env` | `wiki-admins` | Sysop в MediaWiki. |
 | **DNS / hosts** | клиенты + сервер | — | `DOMAIN` должен резолвиться в IP сервера на всех клиентах (SSO привязан к имени). |
-| **SSL-сертификат** | `/etc/nginx/ssl/<DOMAIN>.{crt,key}` | самоподписанный | Для эксплуатации положите сертификат корпоративного УЦ (в `.crt` — цепочка до корня). |
+| **SSL-сертификат** | `/etc/nginx/ssl/<DOMAIN>.{crt,key}` | запрос при установке | Свои файлы: интерактивно или `SSL_CERT`/`SSL_KEY`/`SSL_CHAIN`. В `.crt` — цепочка до корня (нужна oauth2-proxy/порталу). Самоподписанный — только если выбрали или нет TTY. |
 
 > Быстрее всего задать это на пустом сервере через bootstrap:
 > `sudo DOMAIN=corp.example SSO_GROUP_PORTAL_ADMINS=it-admins bash deploy/scripts/bootstrap.sh`
@@ -105,8 +105,11 @@ Docker-сеть `services-network` — `172.28.0.0/16` (шаг 4 `install.sh`). 
 ## Типовые сценарии
 
 - **Свой домен и группы:** задать в `/opt/services/sso.env` (или через `bootstrap.sh`), затем `install.sh`.
-- **Прод-сертификат:** положить в `/etc/nginx/ssl/<DOMAIN>.{crt,key}`, затем
-  `sudo systemctl reload nginx && sudo docker restart oauth2-proxy portal`.
+- **Свои сертификаты при установке:** ответить на запрос шага SSL **или**
+  `sudo SSL_CERT=/path/fullchain.pem SSL_KEY=/path/privkey.pem bash deploy/scripts/install.sh`.
+- **Заменить сертификат позже:**
+  `sudo SSL_FORCE=1 SSL_CERT=… SSL_KEY=… bash /opt/services/scripts/generate-ssl.sh /etc/nginx/ssl <DOMAIN>`,
+  затем `sudo systemctl reload nginx && sudo docker restart oauth2-proxy portal`.
 - **Ограничить консоль Keycloak:** сузить `KEYCLOAK_ADMIN_ALLOW` → `install.sh` (перегенерирует nginx allow-list).
 - **Подключить AD/LDAP:** заполнить `LDAP_*` в `keycloak/.env` → `install.sh`; см. [SSO.md](SSO.md).
 - **Сменить пароль админ-консоли Keycloak:** задать `KEYCLOAK_ADMIN_PASSWORD` → `sudo systemctl restart keycloak`.

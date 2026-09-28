@@ -32,6 +32,10 @@ LDAP/AD и Kerberos — в [SSO.md](SSO.md).
 ```bash
 git clone https://github.com/DanteALI1/portal.git
 cd portal
+# Интерактивно: шаг Nginx+SSL спросит пути к вашему .crt/.pem и ключу
+# (либо предложит самоподписанный). Без запроса:
+#   sudo SSL_CERT=/path/fullchain.pem SSL_KEY=/path/privkey.pem \
+#        bash deploy/scripts/install.sh
 sudo bash deploy/scripts/install.sh 2>&1 | tee ~/portal-install.log
 ```
 
@@ -44,7 +48,7 @@ sudo bash deploy/scripts/install.sh 2>&1 | tee ~/portal-install.log
 | 4 | Docker CE и `docker compose` из репозитория RED OS. **Удаляет `podman-docker`**, если он стоит |
 | 5 | Каталоги `/opt/services/*`, копирование конфигов. `.env`, `LocalSettings.php`, данные при повторном запуске сохраняются |
 | 6 | Пароли и секреты в `.env` (только недостающие: существующие не меняются), сводка в `/opt/services/credentials-*.txt` |
-| 7 | Nginx, самоподписанный сертификат (SAN: домен и все IPv4 сервера), vhost и snippets SSO |
+| 7 | Nginx + SSL: запрос ваших сертификатов (или `SSL_CERT`/`SSL_KEY`), иначе самоподписанный; vhost и snippets SSO |
 | 8 | Keycloak: realm `inion`, группы, клиент, тема входа; `configure.sh` — секрет клиента, сессии, LDAP или тестовые пользователи |
 | 9 | oauth2-proxy + Redis сессий; проверка, что вход перенаправляет на Keycloak |
 | 10 | NetBox с входом по SSO; `post-install.py` — право «только просмотр» для групп и API-токен администратора |
@@ -100,16 +104,17 @@ sudo docker ps --format '{{.Names}}\t{{.Status}}'          # 13 контейне
 
 - **DNS или hosts:** `192.168.1.48 rep.local.inion`
   (`C:\Windows\System32\drivers\etc\hosts` или `/etc/hosts`).
-- **Сертификат** самоподписанный, браузер покажет предупреждение. Для эксплуатации положите сертификат
-  корпоративного УЦ в `/etc/nginx/ssl/rep.local.inion.{crt,key}` (в `.crt` — вместе с цепочкой до корневого)
-  и выполните:
+- **Сертификат.** При установке скрипт предлагает указать свои файлы (или передайте
+  `SSL_CERT` / `SSL_KEY` / опционально `SSL_CHAIN`). В `.crt` должна быть цепочка до корня УЦ —
+  тот же файл монтируется в oauth2-proxy и портал как CA. Если выбрали самоподписанный,
+  браузер покажет предупреждение. Замена после установки:
 
   ```bash
+  sudo SSL_FORCE=1 SSL_CERT=/path/fullchain.pem SSL_KEY=/path/privkey.pem \
+    bash /opt/services/scripts/generate-ssl.sh /etc/nginx/ssl rep.local.inion
   sudo systemctl reload nginx
   sudo docker restart oauth2-proxy portal
   ```
-
-  oauth2-proxy и портал проверяют TLS по этому же файлу, поэтому их нужно перезапустить.
 
 ### Если у сервера изменился IP
 

@@ -27,9 +27,11 @@ NetBox и Вики без повторного ввода пароля; выхо
 ## Быстрый старт на сервере
 
 ```bash
-# Пустой сервер — одна команда (git + клон + полная установка):
-#   curl -fsSL https://raw.githubusercontent.com/DanteALI1/portal/main/deploy/scripts/bootstrap.sh | sudo DOMAIN=rep.local.inion bash
-# Или вручную:
+# Пустой сервер — одна команда (git + клон + полная установка).
+# Свои SSL (рекомендуется):
+#   curl -fsSL https://raw.githubusercontent.com/DanteALI1/portal/main/deploy/scripts/bootstrap.sh \
+#     | sudo DOMAIN=rep.local.inion SSL_CERT=/path/fullchain.pem SSL_KEY=/path/privkey.pem bash
+# Или вручную (шаг SSL спросит пути к сертификату и ключу):
 git clone https://github.com/DanteALI1/portal.git && cd portal
 sudo bash deploy/scripts/install.sh
 sudo cat /opt/services/credentials-*.txt

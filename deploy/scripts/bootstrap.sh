@@ -25,6 +25,15 @@
 #   SSO_GROUP_NETBOX_ADMINS— группа админов NetBox            (по умолчанию netbox-admins)
 #   SSO_GROUP_WIKI_ADMINS  — группа админов Вики              (по умолчанию wiki-admins)
 #   SKIP_INSTALL=1         — только подготовить репозиторий и sso.env, install.sh не запускать
+#   SSL_CERT / SSL_KEY     — пути к своему сертификату (fullchain) и ключу; без запроса
+#   SSL_CHAIN              — опционально цепочка УЦ (дописывается в .crt, если её нет в SSL_CERT)
+#   SSL_MODE=own|selfsigned— own: требовать SSL_CERT/SSL_KEY; selfsigned: не спрашивать
+#   SSL_FORCE=1            — заменить уже установленные /etc/nginx/ssl/<DOMAIN>.{crt,key}
+#
+# SSL при установке: если SSL_CERT/SSL_KEY не заданы и есть консоль — install.sh спросит
+# пути к вашим сертификатам (или предложит самоподписанный). Для curl|bash удобнее передать пути:
+#   curl -fsSL …/bootstrap.sh | sudo \
+#     DOMAIN=rep.local.inion SSL_CERT=/path/fullchain.pem SSL_KEY=/path/privkey.pem bash
 #
 # Идемпотентно: повторный запуск обновляет репозиторий (git pull) и заново
 # прогоняет install.sh; сгенерированные пароли, данные и сертификаты сохраняются.
@@ -92,4 +101,7 @@ fi
 
 log "4/4 Полная установка (deploy/scripts/install.sh)"
 cd "${CHECKOUT_DIR}"
-DOMAIN="${DOMAIN}" SERVICES_ROOT="${SERVICES_ROOT}" bash deploy/scripts/install.sh
+DOMAIN="${DOMAIN}" SERVICES_ROOT="${SERVICES_ROOT}" \
+  SSL_CERT="${SSL_CERT:-}" SSL_KEY="${SSL_KEY:-}" SSL_CHAIN="${SSL_CHAIN:-}" \
+  SSL_MODE="${SSL_MODE:-}" SSL_FORCE="${SSL_FORCE:-0}" \
+  bash deploy/scripts/install.sh
