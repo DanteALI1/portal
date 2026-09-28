@@ -134,7 +134,9 @@ ensure_kv "${NB}" LOGIN_REQUIRED true
 ensure_kv "${NB}" GRAPHQL_ENABLED true
 ensure_kv "${NB}" METRICS_ENABLED false
 ensure_kv "${NB}" MEDIA_ROOT /opt/netbox/netbox/media
-ensure_kv "${NB}" RELEASE_CHECK_URL https://api.github.com/repos/netbox-community/netbox/releases
+# Disable outbound GitHub release checks (corporate networks often block them).
+ensure_kv "${NB}" RELEASE_CHECK_URL ""
+ensure_kv "${NB}" CENSUS_REPORTING_ENABLED false
 # Single sign-on via X-Remote-* headers from Nginx
 set_kv "${NB}" REMOTE_AUTH_ENABLED True
 set_kv "${NB}" REMOTE_AUTH_BACKEND netbox.authentication.RemoteUserBackend
