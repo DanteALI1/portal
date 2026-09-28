@@ -34,6 +34,10 @@ docker inspect -f '{{range .State.Health.Log}}{{.Start}} exit={{.ExitCode}} out=
 
 echo "===== processes inside netbox ====="
 docker exec netbox ps aux 2>&1 || echo 'ps failed'
+if docker exec netbox sh -c 'ps -eo args= | grep -q "[m]anage.py migrate"' 2>/dev/null; then
+  echo "NOTE: manage.py migrate still running — :8080 will stay down until it finishes."
+  echo "      Do not docker compose down -v / recreate volumes; just wait and re-check."
+fi
 echo "===== listen ports inside netbox ====="
 docker exec netbox sh -c 'ss -lntp 2>/dev/null || netstat -lntp 2>/dev/null || true' 2>&1 || true
 echo "===== OOM / restarts ====="
