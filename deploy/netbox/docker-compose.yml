@@ -19,9 +19,11 @@ services:
       BASE_PATH: ${BASE_PATH:-netbox/}
     user: "netbox:root"
     healthcheck:
+      # /netbox/login/ can take several seconds on a cold worker (seen ~5s); keep
+      # timeout well above that or the container flaps unhealthy while serving 200s.
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/netbox/login/ >/dev/null || exit 1"]
-      start_period: 240s
-      timeout: 5s
+      start_period: 300s
+      timeout: 30s
       interval: 15s
       retries: 20
     ports:
