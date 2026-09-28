@@ -22,10 +22,12 @@ services:
       GRANIAN_EXTRA_ARGS: "--host=0.0.0.0"
     user: "netbox:root"
     healthcheck:
-      # /netbox/login/ can take several seconds on a cold worker (seen ~5s); keep
-      # timeout well above that or the container flaps unhealthy while serving 200s.
+      # Fresh DB: full migrate can take 10–15+ min on small hosts before Granian
+      # listens. start_period must cover that or compose marks netbox unhealthy
+      # while migrate is still running (worker stays Created / Waiting).
+      # Cold /netbox/login/ can also take several seconds — keep timeout ≥30s.
       test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8080/netbox/login/ >/dev/null || exit 1"]
-      start_period: 300s
+      start_period: 1200s
       timeout: 30s
       interval: 15s
       retries: 20
