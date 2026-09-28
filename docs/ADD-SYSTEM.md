@@ -68,9 +68,9 @@ networks:
 (их проставляет nginx из oauth2-proxy, см. `deploy/nginx/snippets/sso-headers.conf`). Настройте приём
 этих заголовков средствами самого сервиса (у Grafana — auth proxy, как выше).
 
-### Шаг 2. Маршрут nginx — правка `deploy/nginx/rep.local.inion.conf`
+### Шаг 2. Маршрут nginx — правка `deploy/nginx/portal.conf`
 
-Добавьте `location` внутри `server { server_name rep.local.inion; … }` (рядом с блоками `/netbox/`, `/wiki/`):
+Добавьте `location` внутри `server { server_name __DOMAIN__; … }` (рядом с блоками `/netbox/`, `/wiki/`):
 
 ```nginx
 # Grafana на /grafana/
@@ -149,7 +149,7 @@ sudo nginx -t && sudo systemctl reload nginx
 
 - [ ] `deploy/<name>/docker-compose.yml` — сеть `services-network`, порт только `127.0.0.1:<host>:<cont>`
 - [ ] Сервис принимает `X-Remote-User/Email/Groups` (если нужна личность из SSO)
-- [ ] `location /<name>/` в `deploy/nginx/rep.local.inion.conf` (`sso-protect.conf` + `sso-headers.conf`)
+- [ ] `location /<name>/` в `deploy/nginx/portal.conf` (`sso-protect.conf` + `sso-headers.conf`)
 - [ ] При необходимости — `location` без SSO (`sso-strip.conf`) для токен‑API / статики
 - [ ] Секреты в `gen-env.sh` или `deploy/<name>/.env` (по желанию)
 - [ ] systemd‑юнит и шаги в `install.sh` (по желанию, для автоподъёма)

@@ -6,7 +6,6 @@ set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SERVICES_ROOT="${SERVICES_ROOT:-/opt/services}"
-DOMAIN="${DOMAIN:-rep.local.inion}"
 NGINX_SNIPPETS=/etc/nginx/rep
 TOTAL=14
 
@@ -18,8 +17,23 @@ if [[ "${EUID}" -ne 0 ]]; then
   exit 1
 fi
 
+# DOMAIN: explicit env → existing sso.env → default.
+# Must be exported: docker compose interpolates ${DOMAIN} for oauth2-proxy / portal / Keycloak.
+if [[ -z "${DOMAIN:-}" && -f "${SERVICES_ROOT}/sso.env" ]]; then
+  DOMAIN="$(grep -m1 '^DOMAIN=' "${SERVICES_ROOT}/sso.env" | cut -d= -f2- | tr -d '"')"
+fi
+DOMAIN="${DOMAIN:-rep.local.inion}"
+export DOMAIN
+
+# Render __DOMAIN__ placeholders (awk treats replacement as a literal string).
+render_domain() {
+  local src="$1" dst="$2"
+  awk -v d="${DOMAIN}" '{ gsub(/__DOMAIN__/, d); print }' "${src}" > "${dst}"
+}
+
 step 0 "Preflight"
 command -v dnf >/dev/null || { echo "dnf required (Red OS / RHEL family)"; exit 1; }
+echo "DOMAIN=${DOMAIN}"
 
 step 1 "Packages & hostname"
 dnf install -y git curl wget vim openssl firewalld rsync policycoreutils-python-utils || true
@@ -89,7 +103,18 @@ cp "${REPO_ROOT}/deploy/portal/docker-compose.yml" "${SERVICES_ROOT}/portal/dock
 chmod +x "${SERVICES_ROOT}/scripts/"*.sh "${SERVICES_ROOT}/keycloak/configure.sh"
 
 step 6 "Generate secrets"
-REPO_ROOT="${REPO_ROOT}" bash "${SERVICES_ROOT}/scripts/gen-env.sh" "${SERVICES_ROOT}"
+DOMAIN="${DOMAIN}" REPO_ROOT="${REPO_ROOT}" bash "${SERVICES_ROOT}/scripts/gen-env.sh" "${SERVICES_ROOT}"
+# gen-env persists the effective DOMAIN into sso.env — re-read so later steps match.
+DOMAIN="$(grep -m1 '^DOMAIN=' "${SERVICES_ROOT}/sso.env" | cut -d= -f2- | tr -d '"')"
+DOMAIN="${DOMAIN:-rep.local.inion}"
+export DOMAIN
+echo "DOMAIN=${DOMAIN}"
+
+# Keep portal UI config in sync with the deployment domain (no rebuild needed).
+if [[ -f "${SERVICES_ROOT}/portal/frontend/public/config.js" ]]; then
+  sed -i -E "s/domain:[[:space:]]*'[^']*'/domain: '${DOMAIN}'/" \
+    "${SERVICES_ROOT}/portal/frontend/public/config.js"
+fi
 
 step 7 "Nginx + SSL"
 # Nginx comes before the services: oauth2-proxy reads Keycloak's OIDC discovery through it.
@@ -103,7 +128,8 @@ fi
 bash "${SERVICES_ROOT}/scripts/generate-ssl.sh" /etc/nginx/ssl "${DOMAIN}"
 mkdir -p "${NGINX_SNIPPETS}" /usr/share/nginx/rep
 install -m 644 "${REPO_ROOT}"/deploy/nginx/snippets/*.conf "${NGINX_SNIPPETS}/"
-install -m 644 "${REPO_ROOT}/deploy/nginx/html/403.html" /usr/share/nginx/rep/403.html
+render_domain "${REPO_ROOT}/deploy/nginx/html/403.html" /usr/share/nginx/rep/403.html
+chmod 644 /usr/share/nginx/rep/403.html
 # Keycloak admin console allow-list from KEYCLOAK_ADMIN_ALLOW
 KC_ALLOW="$(grep -m1 '^KEYCLOAK_ADMIN_ALLOW=' "${SERVICES_ROOT}/keycloak/.env" | cut -d= -f2- | tr -d '"')"
 {
@@ -111,9 +137,16 @@ KC_ALLOW="$(grep -m1 '^KEYCLOAK_ADMIN_ALLOW=' "${SERVICES_ROOT}/keycloak/.env" |
   for net in ${KC_ALLOW:-127.0.0.1}; do echo "allow ${net};"; done
   echo "deny all;"
 } > "${NGINX_SNIPPETS}/keycloak-admin-allow.conf"
-install -m 644 "${REPO_ROOT}/deploy/nginx/rep.local.inion.conf" /etc/nginx/conf.d/rep.local.inion.conf
-rm -f /etc/nginx/conf.d/default.conf 2>/dev/null || true
+render_domain "${REPO_ROOT}/deploy/nginx/portal.conf" /etc/nginx/conf.d/portal.conf
+chmod 644 /etc/nginx/conf.d/portal.conf
+# Drop legacy hardcoded vhost and the distro default site.
+rm -f /etc/nginx/conf.d/default.conf /etc/nginx/conf.d/rep.local.inion.conf 2>/dev/null || true
 if command -v restorecon >/dev/null; then restorecon -R /etc/nginx /usr/share/nginx/rep || true; fi
+# Fail early with a clear hint if cert paths and DOMAIN drifted.
+if [[ ! -f "/etc/nginx/ssl/${DOMAIN}.crt" || ! -f "/etc/nginx/ssl/${DOMAIN}.key" ]]; then
+  echo "ERROR: expected /etc/nginx/ssl/${DOMAIN}.{crt,key} — check DOMAIN and SSL_CERT/SSL_KEY" >&2
+  exit 1
+fi
 nginx -t
 systemctl enable --now nginx
 systemctl reload nginx

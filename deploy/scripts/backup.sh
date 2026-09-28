@@ -61,7 +61,7 @@ for svc in netbox mediawiki keycloak oauth2-proxy portal; do
   cp -a "${ROOT}/${svc}/.env" "${BACKUP_DIR}/config/${svc}.env" 2>/dev/null || true
 done
 cp -a "${ROOT}/sso.env" "${ROOT}/keycloak/test-users.env" "${ROOT}/mediawiki/LocalSettings.php" \
-  /etc/nginx/conf.d/rep.local.inion.conf "${BACKUP_DIR}/config/" 2>/dev/null || true
+  /etc/nginx/conf.d/portal.conf "${BACKUP_DIR}/config/" 2>/dev/null || true
 cp -a /etc/nginx/rep "${BACKUP_DIR}/config/nginx-snippets" 2>/dev/null || true
 
 find "${BACKUP_ROOT}" -mindepth 1 -maxdepth 1 -type d -mtime +30 -exec rm -rf {} +

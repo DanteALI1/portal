@@ -48,7 +48,7 @@
 |---|---|---|
 | Keycloak, realm, тема входа, донастройка | `deploy/keycloak/` | `/opt/services/keycloak/` |
 | oauth2-proxy, страница ошибки | `deploy/oauth2-proxy/` | `/opt/services/oauth2-proxy/` |
-| vhost и snippets Nginx | `deploy/nginx/` | `/etc/nginx/conf.d/rep.local.inion.conf`, `/etc/nginx/rep/` |
+| vhost и snippets Nginx | `deploy/nginx/` | `/etc/nginx/conf.d/portal.conf`, `/etc/nginx/rep/` |
 | Имена групп, домен | `deploy/sso.env.example` | `/opt/services/sso.env` |
 
 ## 2. Группы и права
@@ -149,7 +149,7 @@ MediaWiki хранит имя с заглавной первой буквы: `us
 ## 5. Подключение к SSO новой системы
 
 1. Поднимите контейнер системы в сети `services-network` с портом на `127.0.0.1`.
-2. Добавьте `location` в `/etc/nginx/conf.d/rep.local.inion.conf`:
+2. Добавьте `location` в `/etc/nginx/conf.d/portal.conf` (шаблон — `deploy/nginx/portal.conf`):
 
    ```nginx
    location /grafana/ {

@@ -34,7 +34,9 @@ set_kv() { # file key value — add or replace
 }
 
 # --- Shared SSO settings: domain and role group names ---
+# DOMAIN from the caller (install/bootstrap env) wins over a stale sso.env value.
 SSO_ENV="${ROOT}/sso.env"
+CALLER_DOMAIN="${DOMAIN:-}"
 if [[ ! -f "${SSO_ENV}" ]]; then
   cp "${REPO_ROOT}/deploy/sso.env.example" "${SSO_ENV}"
   echo "[env] ${SSO_ENV} created from sso.env.example"
@@ -44,13 +46,18 @@ set -a
 # shellcheck disable=SC1090
 source "${SSO_ENV}"
 set +a
+if [[ -n "${CALLER_DOMAIN}" ]]; then
+  DOMAIN="${CALLER_DOMAIN}"
+fi
 DOMAIN="${DOMAIN:-rep.local.inion}"
+set_kv "${SSO_ENV}" DOMAIN "${DOMAIN}"
 GROUP_KEYS=(SSO_GROUP_USERS SSO_GROUP_PORTAL_ADMINS SSO_GROUP_NETBOX_ADMINS SSO_GROUP_WIKI_ADMINS)
 SSO_GROUP_USERS="${SSO_GROUP_USERS:-portal-users}"
 SSO_GROUP_PORTAL_ADMINS="${SSO_GROUP_PORTAL_ADMINS:-portal-admins}"
 SSO_GROUP_NETBOX_ADMINS="${SSO_GROUP_NETBOX_ADMINS:-netbox-admins}"
 SSO_GROUP_WIKI_ADMINS="${SSO_GROUP_WIKI_ADMINS:-wiki-admins}"
 sync_groups() { local k; set_kv "$1" DOMAIN "${DOMAIN}"; for k in "${GROUP_KEYS[@]}"; do set_kv "$1" "$k" "${!k}"; done; }
+echo "[env] DOMAIN=${DOMAIN}"
 
 # Server IPv4 addresses (NetBox ALLOWED_HOSTS / CSRF for emergency access by IP)
 HOST_IPS="$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -v ':' | xargs || true)"
