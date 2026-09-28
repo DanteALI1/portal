@@ -93,6 +93,7 @@ REPO_ROOT="${REPO_ROOT}" bash "${SERVICES_ROOT}/scripts/gen-env.sh" "${SERVICES_
 
 step 7 "Nginx + SSL"
 # Nginx comes before the services: oauth2-proxy reads Keycloak's OIDC discovery through it.
+# SSL: interactive prompt for your cert/key, or SSL_CERT/SSL_KEY env, or self-signed fallback.
 dnf install -y nginx
 # Package installed but its files deleted (e.g. /etc/nginx removed by hand): restore them
 if [[ ! -f /etc/nginx/nginx.conf || ! -f /etc/nginx/mime.types || ! -d /etc/nginx/conf.d ]]; then
@@ -219,7 +220,8 @@ Configs:     ${SERVICES_ROOT}/
 
 DNS: ${DOMAIN} must resolve to this server on every client (SSO is bound to the name;
      requests by IP are redirected to https://${DOMAIN}/).
-SSL: self-signed by default — replace under /etc/nginx/ssl/ for production.
+SSL: /etc/nginx/ssl/${DOMAIN}.{crt,key}
+     (own certs via prompt or SSL_CERT/SSL_KEY; self-signed only if chosen / unattended)
 Tests: sudo bash deploy/scripts/e2e.sh   (from the repository checkout)
 ============================================================
 EOF
