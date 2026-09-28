@@ -17,6 +17,9 @@ services:
     environment:
       SKIP_SUPERUSER: ${SKIP_SUPERUSER:-false}
       BASE_PATH: ${BASE_PATH:-netbox/}
+      # Granian defaults to :::8080; on hosts with IPv6 disabled it never listens and
+      # healthchecks fail with "Failed to connect to 127.0.0.1 port 8080".
+      GRANIAN_EXTRA_ARGS: "--host=0.0.0.0"
     user: "netbox:root"
     healthcheck:
       # /netbox/login/ can take several seconds on a cold worker (seen ~5s); keep
