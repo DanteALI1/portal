@@ -48,7 +48,7 @@ sudo bash deploy/scripts/install.sh 2>&1 | tee ~/portal-install.log
 | 4 | Docker CE и `docker compose` из репозитория RED OS. **Удаляет `podman-docker`**, если он стоит |
 | 5 | Каталоги `/opt/services/*`, копирование конфигов. `.env`, `LocalSettings.php`, данные при повторном запуске сохраняются |
 | 6 | Пароли и секреты в `.env` (только недостающие: существующие не меняются), сводка в `/opt/services/credentials-*.txt` |
-| 7 | Nginx + SSL: запрос ваших сертификатов (или `SSL_CERT`/`SSL_KEY`), иначе самоподписанный; vhost и snippets SSO |
+| 7 | Nginx + SSL: запрос ваших сертификатов (или `SSL_CERT`/`SSL_KEY`), иначе самоподписанный; vhost из `portal.conf` с подстановкой `DOMAIN` |
 | 8 | Keycloak: realm `inion`, группы, клиент, тема входа; `configure.sh` — секрет клиента, сессии, LDAP или тестовые пользователи |
 | 9 | oauth2-proxy + Redis сессий; проверка, что вход перенаправляет на Keycloak |
 | 10 | NetBox с входом по SSO; `post-install.py` — право «только просмотр» для групп и API-токен администратора |
@@ -111,10 +111,13 @@ sudo docker ps --format '{{.Names}}\t{{.Status}}'          # 13 контейне
 
   ```bash
   sudo SSL_FORCE=1 SSL_CERT=/path/fullchain.pem SSL_KEY=/path/privkey.pem \
-    bash /opt/services/scripts/generate-ssl.sh /etc/nginx/ssl rep.local.inion
+    bash /opt/services/scripts/generate-ssl.sh /etc/nginx/ssl "$(grep -m1 '^DOMAIN=' /opt/services/sso.env | cut -d= -f2-)"
   sudo systemctl reload nginx
   sudo docker restart oauth2-proxy portal
   ```
+
+  Если в сертификате только leaf (без цепочки УЦ) — передайте ещё `SSL_CHAIN=/path/ca-bundle.pem`,
+  иначе oauth2-proxy/портал могут получить `x509: certificate signed by unknown authority`.
 
 ### Если у сервера изменился IP
 
@@ -122,8 +125,8 @@ sudo docker ps --format '{{.Names}}\t{{.Status}}'          # 13 контейне
 старый: доступ идёт по имени) и повторите установку:
 
 ```bash
-sudo rm /etc/nginx/ssl/rep.local.inion.*
-sudo bash deploy/scripts/install.sh
+sudo rm -f /etc/nginx/ssl/"$(grep -m1 '^DOMAIN=' /opt/services/sso.env | cut -d= -f2-)".*
+sudo DOMAIN=… bash deploy/scripts/install.sh
 ```
 
 ## 6. Управление
@@ -133,7 +136,7 @@ sudo bash deploy/scripts/install.sh
 | Статус контейнеров | `sudo docker ps` |
 | Перезапуск сервиса | `sudo systemctl restart keycloak` (или `oauth2-proxy`, `netbox`, `mediawiki`, `portal`) |
 | Логи | `sudo docker logs -f <keycloak\|oauth2-proxy\|netbox\|mediawiki\|portal>` |
-| Логи nginx | `/var/log/nginx/rep.local.inion.{access,error}.log` |
+| Логи nginx | `/var/log/nginx/<DOMAIN>.{access,error}.log` |
 | Бэкап вручную | `sudo /opt/services/scripts/backup.sh` |
 | Где лежат бэкапы | `/opt/services/backups/<дата>/` (базы NetBox, Вики, Keycloak, экспорт realm, файлы, `.env`) |
 | Пользователи и группы | консоль Keycloak, см. [SSO.md](SSO.md) |

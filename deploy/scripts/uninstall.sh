@@ -38,7 +38,8 @@ fi
 
 { crontab -l 2>/dev/null | grep -v "${SERVICES_ROOT}/scripts/backup.sh" || true; } | crontab -
 rm -rf "${SERVICES_ROOT}" /var/log/services
-rm -rf /etc/nginx/conf.d/rep.local.inion.conf /etc/nginx/rep /usr/share/nginx/rep /etc/nginx/ssl
+rm -rf /etc/nginx/conf.d/portal.conf /etc/nginx/conf.d/rep.local.inion.conf \
+  /etc/nginx/rep /usr/share/nginx/rep /etc/nginx/ssl
 if systemctl is-active --quiet nginx; then systemctl reload nginx || true; fi
 log "configs, certificates, credentials and cron removed"
 
