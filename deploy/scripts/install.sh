@@ -181,11 +181,33 @@ step 10 "NetBox"
 cd "${SERVICES_ROOT}/netbox"
 docker compose pull --quiet
 docker compose up -d
-echo "Waiting for NetBox health (first start runs migrations, up to ~5 min)..."
-for _ in $(seq 1 60); do
-  [[ "$(docker inspect -f '{{.State.Health.Status}}' netbox 2>/dev/null)" == healthy ]] && { echo "NetBox is up"; break; }
+# First boot: migrations + cold Granian workers. netbox-worker stays in Compose
+# "Waiting" until netbox is healthy — do not continue while that is pending.
+echo "Waiting for NetBox health (migrations + HTTP, up to ~10 min)..."
+NB_OK=0
+for i in $(seq 1 90); do
+  nb_health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' netbox 2>/dev/null || echo missing)"
+  if [[ "${nb_health}" == "healthy" ]]; then
+    echo "NetBox is up (healthy after $((i * 5))s)"
+    NB_OK=1
+    break
+  fi
+  if (( i % 6 == 0 )); then
+    echo "  … still ${nb_health} (${i}/90); worker waits for healthy"
+    docker compose ps || true
+  fi
   sleep 5
 done
+if [[ "${NB_OK}" -ne 1 ]]; then
+  echo "ERROR: NetBox did not become healthy. Diagnostics:" >&2
+  docker compose ps >&2 || true
+  docker inspect -f 'netbox health={{if .State.Health}}{{.State.Health.Status}} failing={{range .State.Health.Log}}{{.ExitCode}} {{end}}{{end}}' netbox >&2 || true
+  docker logs --tail=80 netbox >&2 || true
+  echo "Hint: curl inside container: docker exec netbox curl -sS -o /dev/null -w '%{http_code}\\n' http://127.0.0.1:8080/netbox/login/" >&2
+  exit 1
+fi
+# Ensure worker starts now that the health condition is satisfied.
+docker compose up -d netbox-worker
 docker exec -i netbox /opt/netbox/venv/bin/python /opt/netbox/netbox/manage.py shell \
   < "${SERVICES_ROOT}/netbox/post-install.py" 2>/dev/null | grep -o '\[netbox\].*' || \
   echo "[netbox] WARNING: post-install.py failed (SSO permission / API token)" >&2
