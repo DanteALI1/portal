@@ -198,9 +198,26 @@ sudo ausearch -m avc -ts recent       # блокировки SELinux
 
 ## 9. Полное удаление
 
-**Внимание:** удаляются все данные NetBox, Вики, Keycloak и портала.
+**Внимание:** удаляются все данные NetBox, Вики, Keycloak, портала и бэкапы в `/opt/services`.
 
 ```bash
-sudo bash deploy/scripts/uninstall.sh --yes            # контейнеры, тома, образы, конфиги, юниты, cron, сертификаты
-sudo bash deploy/scripts/uninstall.sh --yes --purge    # плюс пакеты Docker CE и nginx, возврат podman-docker
+# Стек портала (контейнеры, тома, образы, /opt/services, nginx vhost, SSL, cron, юниты, запись в /etc/hosts)
+sudo bash deploy/scripts/uninstall.sh --yes
+
+# Как выше + пакеты Docker CE и nginx, возврат podman-docker, сброс firewall http/https и SELinux httpd_*
+sudo bash deploy/scripts/uninstall.sh --yes --purge
+
+# Плюс каталог исходников bootstrap (/opt/portal-src)
+sudo bash deploy/scripts/uninstall.sh --yes --purge --remove-src
+
+# Сохранить свои сертификаты в /etc/nginx/ssl
+sudo bash deploy/scripts/uninstall.sh --yes --keep-certs
 ```
+
+Что снимается по шагам: systemd-юниты → `docker compose down -v` по всем сервисам → сеть
+`services-network` и prune → cron бэкапа → `/opt/services` и `/var/log/services` → конфиги nginx
+портала и SSL → строка `127.0.0.1 <DOMAIN>` в `/etc/hosts` → (с `--purge`) пакеты и откат
+окружения хоста.
+
+Без `--purge` остаются пакеты Docker/nginx, `firewalld`, базовые утилиты (`git`, `curl`…),
+hostname и SELinux-булевы — их могли использовать не только портал.
